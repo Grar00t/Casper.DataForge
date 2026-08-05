@@ -42,4 +42,5 @@ Version 1.1.0 introduces the Avalonia implementation, application icon, simplifi
 
 ## License
 
-Copyright (c) 2026 Sulaiman Alshammari. No open-source license has been assigned.
+Source-available for noncommercial use under the PolyForm Noncommercial License 1.0.0. Commercial and corporate use requires prior written permission from Gratech, CR 7050426415. See `LICENSE`.
+
