@@ -15,6 +15,20 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 - Published checksum files
 - Windows code signing
 
+## [1.1.2] - 2026-08-05
+
+### Security
+
+- Removed the native self-extracting single-executable distribution.
+- Replaced the direct EXE release with a conventional multi-file Windows package.
+- Scanned the published directory using Microsoft Defender before packaging.
+- No new Defender detection was recorded during the local pre-release scan.
+
+### Distribution
+
+- Windows x64 self-contained ZIP package.
+- No separate .NET installation required.
+- The executable must remain beside the included native libraries.
 ## [1.1.1] - 2026-08-05
 
 ### Added
@@ -79,3 +93,4 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 [1.1.1]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.0.0
+
