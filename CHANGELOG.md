@@ -2,7 +2,7 @@
 
 All notable changes to Casper.DataForge are documented in this file.
 
-The format follows Keep a Changelog principles, and versions follow Semantic Versioning where practical.
+The format follows Keep a Changelog principles. Versions follow Semantic Versioning where practical.
 
 ## [Unreleased]
 
@@ -11,7 +11,33 @@ The format follows Keep a Changelog principles, and versions follow Semantic Ver
 - Linux x64 release package
 - macOS x64 release package
 - macOS ARM64 release package
-- Automated release validation and checksums
+- Automated build and release validation
+- Published checksum files
+- Windows code signing
+
+## [1.1.1] - 2026-08-05
+
+### Added
+
+- Direct-download Windows x64 executable
+- Self-contained single-file publishing
+- Native Avalonia and Skia libraries bundled for runtime extraction
+- Published SHA-256 verification digest
+
+### Changed
+
+- Updated the project version to `1.1.1`
+- Replaced the ZIP-only distribution model with a directly downloadable executable
+- Improved repository documentation and release navigation
+
+### Verified
+
+- File: `Casper.DataForge.exe`
+- Platform: Windows x64
+- Distribution: Self-contained single executable
+- Size: `46,935,048 bytes`
+- SHA-256: `107F020B527EAE122A21EA6306FFA6E941FE6C0F2A654F26E966DDE87BA43D44`
+- Separate .NET installation: Not required
 
 ## [1.1.0] - 2026-08-05
 
@@ -24,18 +50,18 @@ The format follows Keep a Changelog principles, and versions follow Semantic Ver
 - Text, fenced-code, and LaTeX segmentation
 - Copy and UTF-8 file export
 - Custom Casper.DataForge application identity asset
-- Self-contained Windows x64 release package
+- Self-contained Windows x64 ZIP package
 
 ### Changed
 
-- Simplified packaged executable name to `Casper.DataForge.exe`
+- Simplified the packaged executable name to `Casper.DataForge.exe`
 - Updated project documentation for the Avalonia implementation
 
 ### Verified
 
 - Release build completed with zero warnings and zero errors
-- Windows x64 package published as `Casper.DataForge-v1.1.0-win-x64.zip`
-- Release asset SHA-256: `cfb5e634be572451d11b473793f9f4da2522b7c5d3bd513cea7d5fcab38bf485`
+- Windows package published as `Casper.DataForge-v1.1.0-win-x64.zip`
+- SHA-256: `CFB5E634BE572451D11B473793F9F4DA2522B7C5D3BD513CEA7D5FCAB38BF485`
 
 ## [1.0.0] - 2026-08-05
 
@@ -45,10 +71,11 @@ The format follows Keep a Changelog principles, and versions follow Semantic Ver
 - Deterministic local conversion with `System.Text.Json`
 - Arabic and English text input
 - JSON and JSONL output
-- Text, code, and LaTeX segmentation
+- Text, fenced-code, and LaTeX segmentation
 - Original-content preservation
 - Copy and UTF-8 save operations
 
-[Unreleased]: https://github.com/Grar00t/Casper.DataForge/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Grar00t/Casper.DataForge/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.0.0

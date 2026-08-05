@@ -1,46 +1,204 @@
-# Casper.DataForge
+<p align="center">
+  <img src="src/Casper.DataForge.CrossPlatform/Assets/Casper.DataForge.png" width="128" alt="Casper.DataForge logo">
+</p>
 
-Deterministic desktop converter for structuring Arabic and English text as JSON or JSONL without generation or rewriting.
+<h1 align="center">Casper.DataForge</h1>
 
-## Features
+<p align="center">Deterministic local text structuring for JSON and JSONL.</p>
 
-- Cross-platform Avalonia UI
-- Dark dual-pane interface
-- Automatic and manual RTL/LTR control
-- Deterministic JSON and JSONL output
-- Text, fenced code, and LaTeX segmentation
-- Original text and character-position preservation
-- Copy and UTF-8 export
-- Local processing with System.Text.Json
-- Custom application icon
+<p align="center">
+  <a href="https://github.com/Grar00t/Casper.DataForge/releases/download/v1.1.1/Casper.DataForge.exe"><img src="https://img.shields.io/badge/Download-Windows_x64_EXE-2563EB?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Download Windows x64 EXE"></a>
+  <a href="https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.1"><img src="https://img.shields.io/badge/Release-v1.1.1-238636?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="Release v1.1.1"></a>
+</p>
+
+## Overview
+
+Casper.DataForge is a local desktop application that converts mixed Arabic and English text into structured JSON or JSONL. It preserves the original input and does not generate, summarize, rewrite, complete, or reinterpret source content.
+
+## Why This Exists
+
+Some text-processing tasks require repeatable transformation rather than probabilistic generation. Casper.DataForge provides a narrow, inspectable workflow:
+
+- identical input produces identical structured output
+- conversion runs locally
+- source text remains preserved
+- segment positions remain inspectable
+- output can be verified without an external service
+- no cloud account, API key, prompt, or model is required
+
+The goal is not to replace generative systems. The goal is to use deterministic software where deterministic transformation is sufficient.
 
 ## Download
 
-Download `Casper.DataForge-v1.1.0-win-x64.zip` from GitHub Releases, extract all files, then run `Casper.DataForge.exe`.
+### Windows x64
 
-## Requirements
+[Download Casper.DataForge.exe directly](https://github.com/Grar00t/Casper.DataForge/releases/download/v1.1.1/Casper.DataForge.exe)
 
-- Windows 10 or later
-- Windows x64
-- No separate .NET installation required for the packaged release
+The executable is self-contained and does not require a separate .NET installation.
+
+| Property | Value |
+|---|---|
+| Version | `1.1.1` |
+| Platform | Windows x64 |
+| Distribution | Single self-contained executable |
+| File | `Casper.DataForge.exe` |
+| Size | `46,935,048 bytes` |
+| SHA-256 | `107F020B527EAE122A21EA6306FFA6E941FE6C0F2A654F26E966DDE87BA43D44` |
+
+Verify the downloaded executable:
+
+```powershell
+Get-FileHash .\Casper.DataForge.exe -Algorithm SHA256
+```
+
+## Features
+
+- Deterministic JSON and JSONL serialization
+- Arabic and English text support
+- Automatic and manual RTL/LTR controls
+- Plain-text, fenced-code, and display-LaTeX segmentation
+- Original-source preservation
+- Character offset and length tracking
+- UTF-8 export without BOM
+- Clipboard copy
+- Local processing with `System.Text.Json`
+- Dark dual-pane Avalonia interface
+- No required network connection, cloud account, or API key
+
+## Output Model
+
+```json
+{
+  "Original": "Source text",
+  "Segments": [
+    {
+      "Index": 0,
+      "Type": "text",
+      "Content": "Source text",
+      "Start": 0,
+      "Length": 11
+    }
+  ]
+}
+```
+
+Supported segment types: `text`, `code`, and `latex`. JSONL mode emits one compact JSON object per segment.
+
+## Behavioral Guarantees
+
+For a fixed application version:
+
+1. Source text is not rewritten.
+2. Segment order follows source order.
+3. `Start` and `Length` refer to the original .NET string.
+4. No timestamps or random identifiers are inserted.
+5. Raw operators such as `<`, `>`, `&&`, and `*` remain preserved.
+6. Serialization is performed locally.
+7. Identical input produces identical structured output.
+
+## Architecture
+
+```text
+Casper.DataForge/
+├── src/Casper.DataForge.CrossPlatform/
+│   ├── Assets/
+│   ├── App.axaml
+│   ├── DeterministicConverter.cs
+│   ├── MainWindow.axaml
+│   ├── MainWindow.axaml.cs
+│   └── Casper.DataForge.CrossPlatform.csproj
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.MD
+```
+
+- Repository root: original Windows WPF implementation
+- `src/Casper.DataForge.CrossPlatform`: current Avalonia implementation
+- `DeterministicConverter.cs`: deterministic segmentation and serialization
+- `Assets/Casper.DataForge.png`: application identity asset
 
 ## Build
+
+Requirements:
+
+- .NET SDK `8.0.423`
+- Windows, Linux, or macOS for development
 
 ```powershell
 dotnet build .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj -c Release
 ```
 
-## Project Layout
+Expected result:
 
-- Root: original Windows WPF implementation
-- `src/Casper.DataForge.CrossPlatform`: Avalonia cross-platform implementation
-- `Assets/Casper.DataForge.png`: application identity asset
+```text
+Build succeeded.
+0 Warning(s)
+0 Error(s)
+```
 
-## Release
+## Publish a Windows Single Executable
 
-Version 1.1.0 introduces the Avalonia implementation, application icon, simplified executable name, and self-contained Windows x64 package.
+```powershell
+dotnet publish .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true `
+  -p:DebugType=None `
+  -p:DebugSymbols=false `
+  -o .\release\win-x64-single
+```
 
-## License
+The application may extract bundled native Avalonia and Skia components to a temporary location while running.
 
-Source-available for noncommercial use under the PolyForm Noncommercial License 1.0.0. Commercial and corporate use requires prior written permission from Gratech, CR 7050426415. See `LICENSE`.
+## Project Status
 
+| Area | Status |
+|---|---|
+| Windows x64 single executable | Available |
+| Deterministic JSON and JSONL output | Verified |
+| Arabic and English input | Verified |
+| RTL/LTR controls | Verified |
+| Code and LaTeX segmentation | Verified |
+| UTF-8 export | Verified |
+| Linux release package | Planned |
+| macOS x64 and ARM64 packages | Planned |
+| Automated release workflow | Planned |
+| Code signing | Not implemented |
+
+## Security and Privacy
+
+- Input is processed locally.
+- No telemetry is intentionally implemented.
+- No network access is required for conversion.
+- No credentials or API keys are required.
+- Saved output remains under the user's control.
+
+The current Windows executable is not code-signed. Verify the SHA-256 digest before execution.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting an issue or pull request.
+
+## Changelog
+
+Release history is maintained in [CHANGELOG.md](CHANGELOG.md).
+
+## Licensing
+
+Casper.DataForge is source-available for noncommercial use under the PolyForm Noncommercial License 1.0.0. Commercial, corporate, production, internal-business, hosted-service, resale, integration, AI-training, model-training, or revenue-generating use requires prior written permission and a separate commercial license from:
+
+```text
+Gratech
+Commercial Registration: 7050426415
+Riyadh, Saudi Arabia
+```
+
+See [LICENSE](LICENSE) for the complete notice.
+
+## Maintainer
+
+Maintained through [Grar00t](https://github.com/Grar00t) under the Gratech commercial licensing identity. Technical claims are intended to be supported by source code, build output, release artifacts, and reproducible verification steps.
