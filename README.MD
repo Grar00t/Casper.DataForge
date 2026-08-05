@@ -1,38 +1,45 @@
 # Casper.DataForge
 
-Deterministic local WPF converter for Arabic and English text.
+Deterministic desktop converter for structuring Arabic and English text as JSON or JSONL without generation or rewriting.
 
 ## Features
 
-- Dark dual-pane WPF interface
-- Automatic RTL and LTR input direction
-- JSON and JSONL output
-- Separates plain text, fenced code, and LaTeX
-- Preserves original input without generation or rewriting
-- Copy and UTF-8 save support
-- Fully local using System.Text.Json
+- Cross-platform Avalonia UI
+- Dark dual-pane interface
+- Automatic and manual RTL/LTR control
+- Deterministic JSON and JSONL output
+- Text, fenced code, and LaTeX segmentation
+- Original text and character-position preservation
+- Copy and UTF-8 export
+- Local processing with System.Text.Json
+- Custom application icon
+
+## Download
+
+Download `Casper.DataForge-v1.1.0-win-x64.zip` from GitHub Releases, extract all files, then run `Casper.DataForge.exe`.
 
 ## Requirements
 
 - Windows 10 or later
-- x64 processor
-
-## Download
-
-Download the ready-to-run Windows x64 package from GitHub Releases.
+- Windows x64
+- No separate .NET installation required for the packaged release
 
 ## Build
 
 ```powershell
-dotnet build -c Release
+dotnet build .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj -c Release
 ```
 
-## Publish
+## Project Layout
 
-```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-```
+- Root: original Windows WPF implementation
+- `src/Casper.DataForge.CrossPlatform`: Avalonia cross-platform implementation
+- `Assets/Casper.DataForge.png`: application identity asset
+
+## Release
+
+Version 1.1.0 introduces the Avalonia implementation, application icon, simplified executable name, and self-contained Windows x64 package.
 
 ## License
 
-Copyright (c) 2026 Sulaiman Alshammari.
+Copyright (c) 2026 Sulaiman Alshammari. No open-source license has been assigned.
