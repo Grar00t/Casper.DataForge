@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Casper.DataForge.CrossPlatform.HistoryWindow"
+        Title="Casper Query History / سجل الاستعلامات"
+        Width="900"
+        Height="620"
+        MinWidth="640"
+        MinHeight="420"
+        Background="#0D1016">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+      <TextBlock Text="QUERY HISTORY" FontSize="18" FontWeight="SemiBold" />
+      <TextBlock Text="Stored locally / محفوظ محلياً" Foreground="#9FA8B8" Margin="0,3,0,0" />
+    </StackPanel>
+    <Border Grid.Row="1" Background="#12161E" BorderBrush="#2B3340" BorderThickness="1" CornerRadius="7" Padding="8">
+      <ListBox x:Name="SessionList" Background="Transparent" BorderThickness="0" />
+    </Border>
+  </Grid>
+</Window>

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "casper-foundations-2026-08",
+  "nodes": [
+    {
+      "id": "microsoft",
+      "nameEn": "Microsoft",
+      "nameAr": "مايكروسوفت",
+      "domain": "organization",
+      "summaryEn": "Technology company associated with Azure, Windows, .NET, and developer tooling.",
+      "summaryAr": "شركة تقنية مرتبطة بـ Azure وWindows و.NET وأدوات المطورين."
+    },
+    {
+      "id": "azure",
+      "nameEn": "Microsoft Azure",
+      "nameAr": "مايكروسوفت أزور",
+      "domain": "cloud",
+      "summaryEn": "Microsoft cloud platform for compute, storage, networking, data, and application services.",
+      "summaryAr": "منصة مايكروسوفت السحابية للحوسبة والتخزين والشبكات والبيانات وخدمات التطبيقات."
+    },
+    {
+      "id": "windows",
+      "nameEn": "Windows",
+      "nameAr": "ويندوز",
+      "domain": "operating-system",
+      "summaryEn": "Microsoft operating-system family for desktop, server, and client environments.",
+      "summaryAr": "عائلة أنظمة تشغيل مايكروسوفت لبيئات سطح المكتب والخوادم والعملاء."
+    },
+    {
+      "id": "csharp",
+      "nameEn": "C#",
+      "nameAr": "سي شارب",
+      "domain": "programming-language",
+      "summaryEn": "General-purpose language in the .NET ecosystem with strong typing and modern application tooling.",
+      "summaryAr": "لغة عامة ضمن منظومة .NET تتميز بالأنواع الصارمة وأدوات التطبيقات الحديثة."
+    },
+    {
+      "id": "cpp",
+      "nameEn": "C++",
+      "nameAr": "سي بلس بلس",
+      "domain": "programming-language",
+      "summaryEn": "Compiled systems and application language with direct control over performance and resources.",
+      "summaryAr": "لغة مترجمة للأنظمة والتطبيقات توفر تحكماً مباشراً بالأداء والموارد."
+    },
+    {
+      "id": "c",
+      "nameEn": "C",
+      "nameAr": "سي",
+      "domain": "programming-language",
+      "summaryEn": "Procedural systems-programming language used for operating systems, runtimes, and embedded software.",
+      "summaryAr": "لغة إجرائية للأنظمة تستخدم في أنظمة التشغيل وبيئات التشغيل والبرمجيات المضمنة."
+    },
+    {
+      "id": "assembly",
+      "nameEn": "Assembly",
+      "nameAr": "لغة التجميع",
+      "domain": "programming-language",
+      "summaryEn": "Low-level programming notation closely related to a processor instruction set.",
+      "summaryAr": "صياغة برمجية منخفضة المستوى مرتبطة مباشرة بمجموعة تعليمات المعالج."
+    },
+    {
+      "id": "mathematics",
+      "nameEn": "Mathematics",
+      "nameAr": "الرياضيات",
+      "domain": "foundation",
+      "summaryEn": "Formal foundation for algorithms, statistics, optimization, geometry, and numerical computing.",
+      "summaryAr": "أساس رسمي للخوارزميات والإحصاء والتحسين والهندسة والحوسبة العددية."
+    },
+    {
+      "id": "linux",
+      "nameEn": "Linux",
+      "nameAr": "لينكس",
+      "domain": "operating-system",
+      "summaryEn": "Open-source kernel and operating-system ecosystem used across servers, devices, and development environments.",
+      "summaryAr": "نواة ومنظومة أنظمة تشغيل مفتوحة المصدر تستخدم في الخوادم والأجهزة وبيئات التطوير."
+    },
+    {
+      "id": "ubuntu",
+      "nameEn": "Ubuntu",
+      "nameAr": "أوبونتو",
+      "domain": "operating-system",
+      "summaryEn": "Linux distribution maintained by Canonical for desktop, server, cloud, and developer workloads.",
+      "summaryAr": "توزيعة لينكس تديرها Canonical لسطح المكتب والخوادم والسحابة وأعمال المطورين."
+    },
+    {
+      "id": "aws",
+      "nameEn": "Amazon Web Services",
+      "nameAr": "خدمات أمازون السحابية",
+      "domain": "cloud",
+      "summaryEn": "Cloud platform offering infrastructure, platform, data, security, and application services.",
+      "summaryAr": "منصة سحابية تقدم خدمات البنية التحتية والمنصات والبيانات والأمان والتطبيقات."
+    },
+    {
+      "id": "google-cloud",
+      "nameEn": "Google Cloud",
+      "nameAr": "جوجل كلاود",
+      "domain": "cloud",
+      "summaryEn": "Google cloud platform for infrastructure, data analytics, machine learning, and application services.",
+      "summaryAr": "منصة جوجل السحابية للبنية التحتية وتحليل البيانات وتعلم الآلة وخدمات التطبيقات."
+    },
+    {
+      "id": "oracle-cloud",
+      "nameEn": "Oracle Cloud",
+      "nameAr": "أوراكل كلاود",
+      "domain": "cloud",
+      "summaryEn": "Oracle cloud platform focused on infrastructure, databases, enterprise applications, and developer services.",
+      "summaryAr": "منصة أوراكل السحابية للبنية التحتية وقواعد البيانات وتطبيقات المؤسسات وخدمات المطورين."
+    },
+    {
+      "id": "google",
+      "nameEn": "Google",
+      "nameAr": "جوجل",
+      "domain": "organization",
+      "summaryEn": "Technology organization associated with Google Cloud and a broad software and infrastructure ecosystem.",
+      "summaryAr": "منظمة تقنية مرتبطة بـGoogle Cloud ومنظومة واسعة من البرمجيات والبنية التحتية."
+    },
+    {
+      "id": "amazon",
+      "nameEn": "Amazon",
+      "nameAr": "أمازون",
+      "domain": "organization",
+      "summaryEn": "Technology and commerce organization associated with Amazon Web Services.",
+      "summaryAr": "منظمة تقنية وتجارية مرتبطة بخدمات أمازون السحابية."
+    },
+    {
+      "id": "oracle",
+      "nameEn": "Oracle",
+      "nameAr": "أوراكل",
+      "domain": "organization",
+      "summaryEn": "Enterprise technology organization associated with Oracle Cloud and database platforms.",
+      "summaryAr": "منظمة تقنية للمؤسسات مرتبطة بـOracle Cloud ومنصات قواعد البيانات."
+    },
+    {
+      "id": "english",
+      "nameEn": "English",
+      "nameAr": "الإنجليزية",
+      "domain": "language",
+      "summaryEn": "Primary language for the canonical technical labels and summaries in this seed catalog.",
+      "summaryAr": "اللغة الأساسية للتسميات والملخصات التقنية المرجعية في هذا الكتالوج الأولي."
+    },
+    {
+      "id": "arabic",
+      "nameEn": "Arabic",
+      "nameAr": "العربية",
+      "domain": "language",
+      "summaryEn": "Secondary language for labels and summaries in the user-facing knowledge graph.",
+      "summaryAr": "اللغة الثانوية للتسميات والملخصات في رسم المعرفة الظاهر للمستخدم."
+    }
+  ],
+  "edges": [
+    { "from": "microsoft", "to": "azure", "relation": "provides" },
+    { "from": "microsoft", "to": "windows", "relation": "develops" },
+    { "from": "microsoft", "to": "csharp", "relation": "maintains-ecosystem" },
+    { "from": "azure", "to": "windows", "relation": "supports" },
+    { "from": "azure", "to": "csharp", "relation": "supports" },
+    { "from": "csharp", "to": "mathematics", "relation": "uses" },
+    { "from": "cpp", "to": "assembly", "relation": "compiles-toward" },
+    { "from": "cpp", "to": "mathematics", "relation": "uses" },
+    { "from": "c", "to": "assembly", "relation": "compiles-toward" },
+    { "from": "c", "to": "mathematics", "relation": "uses" },
+    { "from": "assembly", "to": "mathematics", "relation": "uses" },
+    { "from": "linux", "to": "ubuntu", "relation": "distributes-as" },
+    { "from": "aws", "to": "linux", "relation": "runs-workloads-on" },
+    { "from": "google-cloud", "to": "linux", "relation": "runs-workloads-on" },
+    { "from": "oracle-cloud", "to": "linux", "relation": "runs-workloads-on" },
+    { "from": "google", "to": "google-cloud", "relation": "provides" },
+    { "from": "amazon", "to": "aws", "relation": "provides" },
+    { "from": "oracle", "to": "oracle-cloud", "relation": "provides" },
+    { "from": "english", "to": "arabic", "relation": "paired-with" },
+    { "from": "arabic", "to": "english", "relation": "paired-with" }
+  ]
+}

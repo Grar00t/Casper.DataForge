@@ -1,14 +1,15 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Markup;
 using Microsoft.Win32;
+using Casper.DataForge.Core;
 
 namespace Casper.DataForge;
 
 public partial class MainWindow : Window
 {
     private OutputFormat _format = OutputFormat.Json;
+    private DirectionMode _directionMode = DirectionMode.Auto;
 
     public MainWindow()
     {
@@ -19,11 +20,9 @@ public partial class MainWindow : Window
     private void InputTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (!IsInitialized) return;
-        if (InputTextBox.FlowDirection == FlowDirection.LeftToRight ||
-            InputTextBox.FlowDirection == FlowDirection.RightToLeft)
-        {
+        if (_directionMode == DirectionMode.Auto)
             AutoDirection();
-        }
+
         Render();
     }
 
@@ -39,14 +38,35 @@ public partial class MainWindow : Window
         Render();
     }
 
-    private void AutoDirection_Click(object sender, RoutedEventArgs e) => AutoDirection();
-    private void RtlDirection_Click(object sender, RoutedEventArgs e) => InputTextBox.FlowDirection = FlowDirection.RightToLeft;
-    private void LtrDirection_Click(object sender, RoutedEventArgs e) => InputTextBox.FlowDirection = FlowDirection.LeftToRight;
+    private void AutoDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _directionMode = DirectionMode.Auto;
+        AutoDirection();
+    }
+
+    private void RtlDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _directionMode = DirectionMode.Rtl;
+        InputTextBox.FlowDirection = FlowDirection.RightToLeft;
+    }
+
+    private void LtrDirection_Click(object sender, RoutedEventArgs e)
+    {
+        _directionMode = DirectionMode.Ltr;
+        InputTextBox.FlowDirection = FlowDirection.LeftToRight;
+    }
 
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        Clipboard.SetText(OutputTextBox.Text);
-        StatusText.Text = "Copied";
+        try
+        {
+            Clipboard.SetText(OutputTextBox.Text ?? string.Empty);
+            StatusText.Text = "Copied";
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"Copy failed: {exception.Message}";
+        }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -59,9 +79,21 @@ public partial class MainWindow : Window
             Filter = _format == OutputFormat.Json ? "JSON (*.json)|*.json" : "JSON Lines (*.jsonl)|*.jsonl"
         };
 
-        if (dialog.ShowDialog() != true) return;
-        File.WriteAllText(dialog.FileName, OutputTextBox.Text, new System.Text.UTF8Encoding(false));
-        StatusText.Text = $"Saved: {dialog.FileName}";
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            File.WriteAllText(
+                dialog.FileName,
+                OutputTextBox.Text ?? string.Empty,
+                new System.Text.UTF8Encoding(false));
+            StatusText.Text = $"Saved: {dialog.FileName}";
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"Save failed: {exception.Message}";
+        }
     }
 
     private void AutoDirection()
@@ -75,5 +107,12 @@ public partial class MainWindow : Window
     {
         OutputTextBox.Text = DeterministicConverter.Convert(InputTextBox.Text, _format);
         StatusText.Text = $"{_format.ToString().ToUpperInvariant()} | {InputTextBox.Text.Length} chars";
+    }
+
+    private enum DirectionMode
+    {
+        Auto,
+        Rtl,
+        Ltr
     }
 }

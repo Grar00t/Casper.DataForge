@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://casper.dataforge/schemas/knowledge-base.v1.json",
+  "title": "Casper.DataForge Knowledge Base",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogId", "nodes", "edges"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "catalogId": { "type": "string", "minLength": 1 },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nameEn", "nameAr", "domain", "summaryEn", "summaryAr"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$" },
+        "nameEn": { "type": "string", "minLength": 1 },
+        "nameAr": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "summaryEn": { "type": "string", "minLength": 1 },
+        "summaryAr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "relation"],
+      "properties": {
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "relation": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

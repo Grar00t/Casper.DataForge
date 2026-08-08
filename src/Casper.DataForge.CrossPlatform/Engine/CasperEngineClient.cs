@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace Casper.DataForge.CrossPlatform.Engine;
 
@@ -17,12 +18,36 @@ public sealed class CasperEngineClient
         PropertyNameCaseInsensitive = true
     };
 
-    public string ExecutablePath =>
-        Path.Combine(
-            AppContext.BaseDirectory,
-            "Engine",
-            "bin",
-            "casper.exe");
+    public string ExecutablePath
+    {
+        get
+        {
+            string? runtimeDirectory = GetRuntimeDirectory();
+
+            string fileName = OperatingSystem.IsWindows()
+                ? "casper.exe"
+                : "casper";
+
+            if (runtimeDirectory is not null)
+            {
+                string platformPath = Path.Combine(
+                    AppContext.BaseDirectory,
+                    "Engine",
+                    "bin",
+                    runtimeDirectory,
+                    fileName);
+
+                if (File.Exists(platformPath))
+                    return platformPath;
+            }
+
+            return Path.Combine(
+                AppContext.BaseDirectory,
+                "Engine",
+                "bin",
+                OperatingSystem.IsWindows() ? "casper.exe" : "casper");
+        }
+    }
 
     public bool IsAvailable => File.Exists(ExecutablePath);
 
@@ -38,16 +63,19 @@ public sealed class CasperEngineClient
                 "Casper engine executable was not found.",
                 ExecutablePath);
 
+        cancellationToken.ThrowIfCancellationRequested();
+        string executablePath = ExecutablePath;
+
         var startInfo = new ProcessStartInfo
         {
-            FileName = ExecutablePath,
+            FileName = executablePath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(ExecutablePath)!
+            WorkingDirectory = Path.GetDirectoryName(executablePath)!
         };
 
         startInfo.ArgumentList.Add(query);
@@ -63,7 +91,16 @@ public sealed class CasperEngineClient
         Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
         Task<string> errorTask = process.StandardError.ReadToEndAsync();
 
-        await process.WaitForExitAsync(cancellationToken);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            Terminate(process);
+            await process.WaitForExitAsync();
+            throw;
+        }
 
         string output = await outputTask;
         string error = await errorTask;
@@ -95,8 +132,46 @@ public sealed class CasperEngineClient
         return response with
         {
             ExitCode = process.ExitCode,
-            StandardError = error
+            StandardError = error,
+            Sources = response.Sources ?? Array.Empty<CasperSource>()
         };
+    }
+
+    private static string? GetRuntimeDirectory()
+    {
+        string architecture = RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.Arm64 => "arm64",
+            _ => string.Empty
+        };
+
+        if (architecture.Length == 0)
+            return null;
+
+        if (OperatingSystem.IsWindows())
+            return $"win-{architecture}";
+
+        if (OperatingSystem.IsMacOS())
+            return $"osx-{architecture}";
+
+        if (OperatingSystem.IsLinux())
+            return $"linux-{architecture}";
+
+        return null;
+    }
+
+    private static void Terminate(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited between cancellation and termination.
+        }
     }
 }
 

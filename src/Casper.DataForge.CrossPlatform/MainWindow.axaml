@@ -67,6 +67,13 @@
       <Setter Property="FontFamily" Value="Consolas"/>
       <Setter Property="FontSize" Value="12"/>
     </Style>
+
+    <Style Selector="ListBox.chat">
+      <Setter Property="Background" Value="#0F131B"/>
+      <Setter Property="BorderBrush" Value="#343B48"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="8"/>
+    </Style>
   </Window.Styles>
 
   <Grid Margin="16" RowDefinitions="Auto,*,Auto">
@@ -82,10 +89,16 @@
             FontWeight="SemiBold"/>
 
         <TextBlock
-            Text="Deterministic Forge + Casper Engine"
+            Text="Deterministic text structuring · Evidence graph"
             Foreground="#8491A5"
             FontSize="12"
             Margin="1,2,0,0"/>
+
+        <TextBlock
+            Text="LOCAL-FIRST KNOWLEDGE WORKBENCH / مساحة معرفة محلية"
+            Foreground="#66758A"
+            FontSize="10"
+            Margin="1,5,0,0"/>
       </StackPanel>
 
       <StackPanel
@@ -98,6 +111,9 @@
         <Button Content="LTR" Click="LtrDirection_Click"/>
         <Button Content="JSON" Click="Json_Click"/>
         <Button Content="JSONL" Click="Jsonl_Click"/>
+        <Button Content="Graph" Click="Graph_Click"/>
+        <Button Content="Knowledge" Click="Knowledge_Click"/>
+        <Button Content="History" Click="History_Click"/>
         <Button Content="Copy" Click="Copy_Click"/>
         <Button Content="Save" Click="Save_Click"/>
       </StackPanel>
@@ -167,7 +183,7 @@
 
             <StackPanel>
               <TextBlock
-                  Text="CASPER ENGINE"
+                  Text="CASPER ENGINE / محرك كاسبر"
                   Foreground="#E8EAF0"
                   FontWeight="SemiBold"/>
 
@@ -175,6 +191,16 @@
                   x:Name="EngineStatusText"
                   Classes="metric"
                   Text="Checking engine..."/>
+
+              <TextBlock
+                  x:Name="DatabaseStatusText"
+                  Classes="metric"
+                  Text="Checking local database..."/>
+
+              <TextBlock
+                  x:Name="KnowledgeStatusText"
+                  Classes="metric"
+                  Text="Checking knowledge base..."/>
             </StackPanel>
 
             <Border
@@ -211,16 +237,19 @@
                 Click="SendQuery_Click"/>
           </Grid>
 
-          <TextBox
-              x:Name="AnswerTextBox"
-              Grid.Row="2"
-              Classes="editor"
-              IsReadOnly="True"
-              AcceptsReturn="True"
-              TextWrapping="Wrap"
-              FlowDirection="LeftToRight"
-              ScrollViewer.VerticalScrollBarVisibility="Auto"
-              Watermark="Casper answer will appear here..."/>
+          <Grid Grid.Row="2" RowDefinitions="Auto,*">
+            <TextBlock
+                Grid.Row="0"
+                Classes="label"
+                Text="CHAT / المحادثة"/>
+
+            <ListBox
+                x:Name="ChatMessagesList"
+                Grid.Row="1"
+                Classes="chat"
+                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+          </Grid>
 
           <Grid Grid.Row="3"
                 ColumnDefinitions="*,*"
@@ -266,7 +295,7 @@
       <TextBlock
           Grid.Column="1"
           Foreground="#66758A"
-          Text="LOCAL UI · C ENGINE · JSON PROTOCOL"/>
+          Text="LOCAL UI · SQLITE · C ENGINE · JSON PROTOCOL"/>
     </Grid>
   </Grid>
 </Window>

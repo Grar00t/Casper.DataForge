@@ -486,3 +486,6 @@ $RECYCLE.BIN/
 .dataforge-backup-*/
 
 *.proof
+*.db
+*.db-shm
+*.db-wal

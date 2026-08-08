@@ -21,6 +21,18 @@ Build the cross-platform implementation:
 dotnet build .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj -c Release
 ```
 
+Run the deterministic Core checks:
+
+```powershell
+dotnet run --project .\tests\Casper.DataForge.Core.Smoke -c Release
+```
+
+Run the Casper engine and SQLite integration smoke check on a machine with the bundled engine:
+
+```powershell
+dotnet run --project .\tests\Casper.EngineClient.Smoke -c Release
+```
+
 A release-quality change must produce:
 
 ```text
@@ -40,6 +52,8 @@ Contributions must:
 5. Keep processing local unless a separately reviewed feature explicitly requires otherwise.
 6. Maintain Arabic and English RTL/LTR behavior.
 7. Include a concise validation procedure in the pull request.
+8. Validate knowledge-base changes against `Assets/KnowledgeBase/knowledge.schema.json` and keep node IDs stable.
+9. Keep UI animations bounded and non-blocking; never run engine or database work on the render thread.
 
 ## Pull Requests
 

@@ -8,4 +8,17 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="src\Casper.DataForge.Core\Casper.DataForge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="src\**\*.cs" />
+    <Compile Remove="tests\**\*.cs" />
+    <EmbeddedResource Remove="src\**\*" />
+    <EmbeddedResource Remove="tests\**\*" />
+    <None Remove="src\**\*" />
+    <None Remove="tests\**\*" />
+  </ItemGroup>
+
 </Project>

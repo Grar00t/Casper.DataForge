@@ -2,6 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj" />
+    <Content Include="..\..\src\Casper.DataForge.CrossPlatform\Assets\KnowledgeBase\**">
+      <Link>Assets\KnowledgeBase\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <PropertyGroup>

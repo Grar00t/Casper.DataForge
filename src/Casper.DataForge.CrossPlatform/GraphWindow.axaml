@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Casper.DataForge.CrossPlatform.GraphWindow"
+        Title="Casper Evidence Graph / رسم الأدلة"
+        Width="1050"
+        Height="720"
+        MinWidth="700"
+        MinHeight="480"
+        Background="#0D1016">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+      <TextBlock Text="EVIDENCE GRAPH" FontSize="18" FontWeight="SemiBold" />
+      <TextBlock x:Name="SummaryText" Foreground="#9FA8B8" Margin="0,3,0,0" />
+    </StackPanel>
+    <Border Grid.Row="1" Background="#12161E" BorderBrush="#2B3340" BorderThickness="1" CornerRadius="7">
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <Canvas x:Name="GraphCanvas" Width="1000" Height="620" Background="#0F131B" />
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</Window>

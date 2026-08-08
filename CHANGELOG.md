@@ -6,6 +6,22 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 
 ## [Unreleased]
 
+### Added
+
+- Shared `Casper.DataForge.Core` library used by WPF and Avalonia clients.
+- Local SQLite persistence for query sessions, sources, and evidence graphs.
+- Bilingual knowledge-base seed and JSON Schema contract for core technology domains.
+- Evidence graph and local query-history windows.
+- Bounded bilingual Chat history and animated 3D-projection graph view.
+- Core and engine/database smoke validation.
+
+### Changed
+
+- Manual RTL/LTR direction is now preserved while editing; Auto mode remains automatic.
+- Casper engine path selection now supports platform and architecture-specific binaries.
+- Cancellation terminates the native Casper process safely.
+- Documentation now distinguishes deterministic offline conversion from optional web retrieval.
+
 ### Planned
 
 - Linux x64 release package
@@ -89,7 +105,7 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 - Original-content preservation
 - Copy and UTF-8 save operations
 
-[Unreleased]: https://github.com/Grar00t/Casper.DataForge/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Grar00t/Casper.DataForge/compare/v1.1.2...HEAD
 [1.1.1]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.0.0

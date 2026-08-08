@@ -2,27 +2,35 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable><AssemblyName>Casper.DataForge</AssemblyName><Product>Casper.DataForge</Product><Version>1.1.2</Version>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Casper.DataForge</AssemblyName>
+    <Product>Casper.DataForge</Product>
+    <Version>1.2.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Casper.DataForge.Core\Casper.DataForge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <Content Include="Assets\KnowledgeBase\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Engine\bin\casper.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Engine\bin\CASPER-EXE-MANIFEST.txt">
+    <Content Include="Engine\bin\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
