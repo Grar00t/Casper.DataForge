@@ -209,7 +209,7 @@ public partial class MainWindow : Window
             if (!string.IsNullOrWhiteSpace(source.Url))
             {
                 builder.Append("URL: ")
-                    .AppendLine(WebUtility.HtmlDecode(source.Url));
+                    .AppendLine(SourceTextNormalizer.NormalizeUrl(source.Url));
             }
 
             if (!string.IsNullOrWhiteSpace(source.Snippet))
@@ -266,3 +266,4 @@ public partial class MainWindow : Window
             : value[..12];
     }
 }
+
