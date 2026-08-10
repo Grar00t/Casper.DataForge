@@ -7,9 +7,12 @@ public static class SourceTextNormalizer
 {
     public static string DecodeHtml(string? value)
     {
-        string current = value ?? string.Empty;
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
 
-        for (var pass = 0; pass < 4; pass++)
+        string current = value;
+
+        for (int pass = 0; pass < 4; pass++)
         {
             string decoded = WebUtility.HtmlDecode(current);
 
@@ -26,8 +29,9 @@ public static class SourceTextNormalizer
     {
         string result = DecodeHtml(value).Trim();
 
-        return result.StartsWith("//", StringComparison.Ordinal)
-            ? "https:" + result
-            : result;
+        if (result.StartsWith("//", StringComparison.Ordinal))
+            result = "https:" + result;
+
+        return result;
     }
 }
