@@ -94,12 +94,9 @@ public static class DeterministicConverter
         return builder.ToString().TrimEnd('\r', '\n');
     }
 
-    private static (int Start, string Open, string Close, string Type) FindNextMarker(
-        string source,
-        int from)
+    private static (int Start, string Open, string Close, string Type) FindNextMarker(string source, int from)
     {
         var best = (-1, string.Empty, string.Empty, string.Empty);
-
         foreach ((string open, string close, string type) in Markers)
         {
             int index = source.IndexOf(open, from, StringComparison.Ordinal);
@@ -110,31 +107,19 @@ public static class DeterministicConverter
         return best;
     }
 
-    private static int FindClosingMarker(
-        string source,
-        (int Start, string Open, string Close, string Type) marker)
+    private static int FindClosingMarker(string source, (int Start, string Open, string Close, string Type) marker)
     {
         int searchFrom = marker.Start + marker.Open.Length;
         int close = source.IndexOf(marker.Close, searchFrom, StringComparison.Ordinal);
         return close < 0 ? source.Length : close + marker.Close.Length;
     }
 
-    private static void Add(
-        List<Segment> target,
-        string type,
-        string source,
-        int start,
-        int length)
+    private static void Add(List<Segment> target, string type, string source, int start, int length)
     {
         if (length <= 0)
             return;
 
-        target.Add(new Segment(
-            target.Count,
-            type,
-            source.Substring(start, length),
-            start,
-            length));
+        target.Add(new Segment(target.Count, type, source.Substring(start, length), start, length));
     }
 }
 
@@ -152,9 +137,7 @@ public static class DirectionDetector
                 >= '\u08A0' and <= '\u08FF' or
                 >= '\uFB50' and <= '\uFDFF' or
                 >= '\uFE70' and <= '\uFEFF')
-            {
                 return true;
-            }
         }
 
         return false;
