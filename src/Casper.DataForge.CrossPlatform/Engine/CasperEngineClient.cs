@@ -32,39 +32,25 @@ public sealed class CasperEngineClient
         get
         {
             string? runtimeDirectory = GetRuntimeDirectory();
-
             string fileName = OperatingSystem.IsWindows() ? "casper.exe" : "casper";
 
             if (runtimeDirectory is not null)
             {
-                string platformPath = Path.Combine(
-                    AppContext.BaseDirectory,
-                    "Engine",
-                    "bin",
-                    runtimeDirectory,
-                    fileName);
-
+                string platformPath = Path.Combine(AppContext.BaseDirectory, "Engine", "bin", runtimeDirectory, fileName);
                 if (File.Exists(platformPath))
                     return platformPath;
             }
 
-            return Path.Combine(
-                AppContext.BaseDirectory,
-                "Engine",
-                "bin",
-                OperatingSystem.IsWindows() ? "casper.exe" : "casper");
+            return Path.Combine(AppContext.BaseDirectory, "Engine", "bin", fileName);
         }
     }
 
     public bool IsAvailable => File.Exists(ExecutablePath);
 
-    public async Task<CasperResponse> QueryAsync(
-        string query,
-        CancellationToken cancellationToken = default)
+    public async Task<CasperResponse> QueryAsync(string query, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be empty.", nameof(query));
-
         if (!IsAvailable)
             throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
@@ -72,9 +58,7 @@ public sealed class CasperEngineClient
         using CancellationTokenSource linkedCts =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-        linkedCts.Token.ThrowIfCancellationRequested();
         string executablePath = ExecutablePath;
-
         var startInfo = new ProcessStartInfo
         {
             FileName = executablePath,
@@ -86,11 +70,9 @@ public sealed class CasperEngineClient
             StandardErrorEncoding = Encoding.UTF8,
             WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
         };
-
         startInfo.ArgumentList.Add(query);
 
         using var process = new Process { StartInfo = startInfo };
-
         if (!process.Start())
             throw new InvalidOperationException("Casper engine did not start.");
 
@@ -119,11 +101,7 @@ public sealed class CasperEngineClient
         int exitCode = process.ExitCode;
 
         if (exitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"Casper engine failed with exit code {exitCode}. Error={error.Trim()}");
-        }
-
+            throw new InvalidOperationException($"Casper engine failed with exit code {exitCode}. Error={error.Trim()}");
         if (string.IsNullOrWhiteSpace(output))
             throw new InvalidDataException($"Casper returned no JSON. Error={error.Trim()}");
 
@@ -134,23 +112,19 @@ public sealed class CasperEngineClient
         }
         catch (JsonException exception)
         {
-            throw new InvalidDataException(
-                $"Casper returned invalid JSON. Raw={output}",
-                exception);
+            throw new InvalidDataException("Casper returned invalid JSON.", exception);
         }
 
         if (response is null)
             throw new InvalidDataException("Casper returned an empty JSON value.");
-
         if (response.SourceCount < 0)
             throw new InvalidDataException("Casper returned a negative source count.");
+        if (response.Sources is null)
+            response = response with { Sources = Array.Empty<CasperSource>() };
+        if (response.SourceCount != response.Sources.Count)
+            throw new InvalidDataException($"Casper source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
 
-        return response with
-        {
-            ExitCode = exitCode,
-            StandardError = error,
-            Sources = response.Sources ?? Array.Empty<CasperSource>()
-        };
+        return response with { ExitCode = exitCode, StandardError = error };
     }
 
     private static string? GetRuntimeDirectory()
@@ -161,17 +135,11 @@ public sealed class CasperEngineClient
             Architecture.Arm64 => "arm64",
             _ => string.Empty
         };
-
         if (architecture.Length == 0)
             return null;
-
-        if (OperatingSystem.IsWindows())
-            return $"win-{architecture}";
-        if (OperatingSystem.IsMacOS())
-            return $"osx-{architecture}";
-        if (OperatingSystem.IsLinux())
-            return $"linux-{architecture}";
-
+        if (OperatingSystem.IsWindows()) return $"win-{architecture}";
+        if (OperatingSystem.IsMacOS()) return $"osx-{architecture}";
+        if (OperatingSystem.IsLinux()) return $"linux-{architecture}";
         return null;
     }
 
@@ -184,7 +152,6 @@ public sealed class CasperEngineClient
         }
         catch (InvalidOperationException)
         {
-            // Process exited between cancellation and termination.
         }
     }
 }
@@ -193,40 +160,28 @@ public sealed record CasperResponse
 {
     [JsonPropertyName("query")]
     public string? Query { get; init; }
-
     [JsonPropertyName("answer")]
     public string? Answer { get; init; }
-
     [JsonPropertyName("error")]
     public string? Error { get; init; }
-
     [JsonPropertyName("confidence")]
     public double Confidence { get; init; }
-
     [JsonPropertyName("elapsed_ms")]
     public long ElapsedMilliseconds { get; init; }
-
     [JsonPropertyName("violated")]
     public bool Violated { get; init; }
-
     [JsonPropertyName("rejected")]
     public bool Rejected { get; init; }
-
     [JsonPropertyName("proof")]
     public string? Proof { get; init; }
-
     [JsonPropertyName("proof_file")]
     public string? ProofFile { get; init; }
-
     [JsonPropertyName("n_sources")]
     public int SourceCount { get; init; }
-
     [JsonPropertyName("sources")]
     public IReadOnlyList<CasperSource> Sources { get; init; } = Array.Empty<CasperSource>();
-
     [JsonIgnore]
     public int ExitCode { get; init; }
-
     [JsonIgnore]
     public string StandardError { get; init; } = string.Empty;
 }
@@ -235,19 +190,14 @@ public sealed record CasperSource
 {
     [JsonPropertyName("n")]
     public int Number { get; init; }
-
     [JsonPropertyName("score")]
     public double Score { get; init; }
-
     [JsonPropertyName("sha256")]
     public string? Sha256 { get; init; }
-
     [JsonPropertyName("title")]
     public string? Title { get; init; }
-
     [JsonPropertyName("url")]
     public string? Url { get; init; }
-
     [JsonPropertyName("snippet")]
     public string? Snippet { get; init; }
 }
