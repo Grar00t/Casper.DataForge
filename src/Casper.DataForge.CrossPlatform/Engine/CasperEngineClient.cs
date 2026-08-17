@@ -73,19 +73,24 @@ public sealed class CasperEngineClient
         if (!IsAvailable)
             throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
+        string? expectedHash = TryReadBundledSha256();
+        if (expectedHash is not null && !VerifySha256(expectedHash))
+            throw new InvalidDataException("Bundled Casper engine SHA-256 does not match its manifest.");
+
         using CancellationTokenSource timeoutCts = new(Timeout);
         using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
+        string executablePath = ExecutablePath;
         ProcessStartInfo startInfo = new()
         {
-            FileName = ExecutablePath,
+            FileName = executablePath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(ExecutablePath) ?? AppContext.BaseDirectory
+            WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
         };
         startInfo.ArgumentList.Add(query);
 
@@ -142,6 +147,26 @@ public sealed class CasperEngineClient
             throw new InvalidDataException($"Casper source count mismatch: declared {response.SourceCount}, actual {sources.Count}.");
 
         return response with { ExitCode = exitCode, StandardError = error, Sources = sources };
+    }
+
+    private string? TryReadBundledSha256()
+    {
+        string manifestPath = Path.Combine(AppContext.BaseDirectory, "Engine", "bin", "CASPER-EXE-MANIFEST.txt");
+        if (!File.Exists(manifestPath))
+            return null;
+
+        foreach (string line in File.ReadLines(manifestPath))
+        {
+            const string prefix = "SHA256=";
+            if (!line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string value = line[prefix.Length..].Trim();
+            if (value.Length == 64)
+                return value;
+        }
+
+        return null;
     }
 
     private static string? GetRuntimeDirectory()
