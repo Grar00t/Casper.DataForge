@@ -16,12 +16,19 @@ public sealed record KnowledgeGraph(
         string query,
         CasperResponse response)
     {
+        ArgumentNullException.ThrowIfNull(response);
+
+        string normalizedQuery = query?.Trim() ?? string.Empty;
         var nodes = new List<GraphNode>
         {
-            new("query", query.Trim(), "query")
+            new("query", normalizedQuery, "query")
         };
         var edges = new List<GraphEdge>();
-        var usedIds = new HashSet<string>(StringComparer.Ordinal);
+        var usedIds = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "query"
+        };
+        var identityToNodeId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < response.Sources.Count; index++)
         {
@@ -29,23 +36,36 @@ public sealed record KnowledgeGraph(
             string identity = SourceTextNormalizer.NormalizeUrl(source.Url);
 
             if (identity.Length == 0)
-                identity = source.Title?.Trim() ?? $"Source {index + 1}";
+                identity = SourceTextNormalizer.DecodeHtml(source.Title).Trim();
+            if (identity.Length == 0)
+                identity = $"source-{index + 1}";
 
-            string id = "source-" + (index + 1);
-            while (!usedIds.Add(id))
-                id = $"source-{index + 1}-{usedIds.Count}";
+            if (!identityToNodeId.TryGetValue(identity, out string? id))
+            {
+                id = MakeUniqueId("source", index + 1, usedIds);
+                identityToNodeId[identity] = id;
 
-            string label = string.IsNullOrWhiteSpace(source.Title)
-                ? identity
-                : SourceTextNormalizer.DecodeHtml(source.Title).Trim();
+                string label = string.IsNullOrWhiteSpace(source.Title)
+                    ? identity
+                    : SourceTextNormalizer.DecodeHtml(source.Title).Trim();
 
-            nodes.Add(new GraphNode(id, label, "source"));
-            edges.Add(new GraphEdge(
-                "query",
-                id,
-                $"score {source.Score.ToString("0.000", CultureInfo.InvariantCulture)}"));
+                nodes.Add(new GraphNode(id, label, "source"));
+            }
+
+            string relation =
+                $"score {source.Score.ToString("0.000", CultureInfo.InvariantCulture)}";
+            edges.Add(new GraphEdge("query", id, relation));
         }
 
         return new KnowledgeGraph(nodes, edges);
+    }
+
+    private static string MakeUniqueId(string prefix, int ordinal, HashSet<string> usedIds)
+    {
+        string id = $"{prefix}-{ordinal}";
+        int suffix = 2;
+        while (!usedIds.Add(id))
+            id = $"{prefix}-{ordinal}-{suffix++}";
+        return id;
     }
 }
