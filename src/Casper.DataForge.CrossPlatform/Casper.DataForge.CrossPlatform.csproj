@@ -3,6 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Casper.DataForge</AssemblyName>
     <Product>Casper.DataForge</Product>
     <Version>1.2.0</Version>
@@ -19,6 +20,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <Content Include="Engine\bin\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <Visible>false</Visible>
+    </Content>
     <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
@@ -29,17 +35,12 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
   </ItemGroup>
-  <ItemGroup>
-    <Content Include="Engine\bin\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
+
+  <Target Name="ValidateBundledCasper" AfterTargets="Build">
+    <PropertyGroup>
+      <CasperBinary Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine\bin\casper.exe</CasperBinary>
+      <CasperBinary Condition="!$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine\bin\casper</CasperBinary>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(CasperBinary)')" Text="Bundled Casper engine executable is missing: $(CasperBinary)" />
+  </Target>
 </Project>
-
-
-
-
-
-
-
