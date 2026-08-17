@@ -18,15 +18,22 @@ public sealed class CasperEngineClient
         PropertyNameCaseInsensitive = true
     };
 
+    public CasperEngineClient(TimeSpan? timeout = null)
+    {
+        Timeout = timeout ?? TimeSpan.FromSeconds(30);
+        if (Timeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be positive.");
+    }
+
+    public TimeSpan Timeout { get; }
+
     public string ExecutablePath
     {
         get
         {
             string? runtimeDirectory = GetRuntimeDirectory();
 
-            string fileName = OperatingSystem.IsWindows()
-                ? "casper.exe"
-                : "casper";
+            string fileName = OperatingSystem.IsWindows() ? "casper.exe" : "casper";
 
             if (runtimeDirectory is not null)
             {
@@ -59,11 +66,13 @@ public sealed class CasperEngineClient
             throw new ArgumentException("Query cannot be empty.", nameof(query));
 
         if (!IsAvailable)
-            throw new FileNotFoundException(
-                "Casper engine executable was not found.",
-                ExecutablePath);
+            throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
-        cancellationToken.ThrowIfCancellationRequested();
+        using CancellationTokenSource timeoutCts = new(Timeout);
+        using CancellationTokenSource linkedCts =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        linkedCts.Token.ThrowIfCancellationRequested();
         string executablePath = ExecutablePath;
 
         var startInfo = new ProcessStartInfo
@@ -75,15 +84,12 @@ public sealed class CasperEngineClient
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(executablePath)!
+            WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
         };
 
         startInfo.ArgumentList.Add(query);
 
-        using var process = new Process
-        {
-            StartInfo = startInfo
-        };
+        using var process = new Process { StartInfo = startInfo };
 
         if (!process.Start())
             throw new InvalidOperationException("Casper engine did not start.");
@@ -93,45 +99,55 @@ public sealed class CasperEngineClient
 
         try
         {
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            Terminate(process);
+            await process.WaitForExitAsync().ConfigureAwait(false);
+            throw new TimeoutException($"Casper engine exceeded the configured timeout of {Timeout.TotalSeconds:0.###} seconds.");
         }
         catch (OperationCanceledException)
         {
             Terminate(process);
-            await process.WaitForExitAsync();
+            await process.WaitForExitAsync().ConfigureAwait(false);
             throw;
         }
 
-        string output = await outputTask;
-        string error = await errorTask;
+        string output = await outputTask.ConfigureAwait(false);
+        string error = await errorTask.ConfigureAwait(false);
+        int exitCode = process.ExitCode;
 
-        if (string.IsNullOrWhiteSpace(output))
+        if (exitCode != 0)
         {
             throw new InvalidOperationException(
-                $"Casper returned no JSON. ExitCode={process.ExitCode}. Error={error}");
+                $"Casper engine failed with exit code {exitCode}. Error={error.Trim()}");
         }
 
-        CasperResponse? response;
+        if (string.IsNullOrWhiteSpace(output))
+            throw new InvalidDataException($"Casper returned no JSON. Error={error.Trim()}");
 
+        CasperResponse? response;
         try
         {
-            response = JsonSerializer.Deserialize<CasperResponse>(
-                output,
-                JsonOptions);
+            response = JsonSerializer.Deserialize<CasperResponse>(output, JsonOptions);
         }
         catch (JsonException exception)
         {
             throw new InvalidDataException(
-                $"Casper returned invalid JSON. ExitCode={process.ExitCode}. Raw={output}",
+                $"Casper returned invalid JSON. Raw={output}",
                 exception);
         }
 
         if (response is null)
             throw new InvalidDataException("Casper returned an empty JSON value.");
 
+        if (response.SourceCount < 0)
+            throw new InvalidDataException("Casper returned a negative source count.");
+
         return response with
         {
-            ExitCode = process.ExitCode,
+            ExitCode = exitCode,
             StandardError = error,
             Sources = response.Sources ?? Array.Empty<CasperSource>()
         };
@@ -151,10 +167,8 @@ public sealed class CasperEngineClient
 
         if (OperatingSystem.IsWindows())
             return $"win-{architecture}";
-
         if (OperatingSystem.IsMacOS())
             return $"osx-{architecture}";
-
         if (OperatingSystem.IsLinux())
             return $"linux-{architecture}";
 
@@ -170,7 +184,7 @@ public sealed class CasperEngineClient
         }
         catch (InvalidOperationException)
         {
-            // The process exited between cancellation and termination.
+            // Process exited between cancellation and termination.
         }
     }
 }
@@ -208,8 +222,7 @@ public sealed record CasperResponse
     public int SourceCount { get; init; }
 
     [JsonPropertyName("sources")]
-    public IReadOnlyList<CasperSource> Sources { get; init; } =
-        Array.Empty<CasperSource>();
+    public IReadOnlyList<CasperSource> Sources { get; init; } = Array.Empty<CasperSource>();
 
     [JsonIgnore]
     public int ExitCode { get; init; }
