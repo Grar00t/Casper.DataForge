@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _queryCancellation?.Cancel();
+        _queryCancellation?.Dispose();
+        _queryCancellation = null;
         _graphWindow?.Close();
         _historyWindow?.Close();
         _database.Dispose();
@@ -82,15 +84,13 @@ public partial class MainWindow : Window
     private void RtlDirection_Click(object? sender, RoutedEventArgs e)
     {
         _directionMode = DirectionMode.Rtl;
-        InputTextBox.FlowDirection =
-            Avalonia.Media.FlowDirection.RightToLeft;
+        InputTextBox.FlowDirection = Avalonia.Media.FlowDirection.RightToLeft;
     }
 
     private void LtrDirection_Click(object? sender, RoutedEventArgs e)
     {
         _directionMode = DirectionMode.Ltr;
-        InputTextBox.FlowDirection =
-            Avalonia.Media.FlowDirection.LeftToRight;
+        InputTextBox.FlowDirection = Avalonia.Media.FlowDirection.LeftToRight;
     }
 
     private async void Copy_Click(object? sender, RoutedEventArgs e)
@@ -98,7 +98,6 @@ public partial class MainWindow : Window
         try
         {
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-
             if (clipboard is null)
             {
                 StatusText.Text = "Clipboard unavailable";
@@ -116,8 +115,7 @@ public partial class MainWindow : Window
 
     private async void Save_Click(object? sender, RoutedEventArgs e)
     {
-        string extension =
-            _format == OutputFormat.Json ? "json" : "jsonl";
+        string extension = _format == OutputFormat.Json ? "json" : "jsonl";
 
         try
         {
@@ -128,10 +126,7 @@ public partial class MainWindow : Window
                     DefaultExtension = extension,
                     FileTypeChoices =
                     [
-                        new FilePickerFileType(
-                            _format == OutputFormat.Json
-                                ? "JSON"
-                                : "JSON Lines")
+                        new FilePickerFileType(_format == OutputFormat.Json ? "JSON" : "JSON Lines")
                         {
                             Patterns = [$"*.{extension}"]
                         }
@@ -143,10 +138,7 @@ public partial class MainWindow : Window
 
             await using Stream stream = await file.OpenWriteAsync();
             stream.SetLength(0);
-
-            await using var writer =
-                new StreamWriter(stream, new UTF8Encoding(false));
-
+            await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
             await writer.WriteAsync(OutputTextBox.Text ?? string.Empty);
             StatusText.Text = $"Saved: {file.Name}";
         }
@@ -162,7 +154,6 @@ public partial class MainWindow : Window
             return;
 
         string query = QueryTextBox.Text?.Trim() ?? string.Empty;
-
         if (query.Length == 0)
         {
             StatusText.Text = "Enter a Casper query";
@@ -177,6 +168,7 @@ public partial class MainWindow : Window
         }
 
         _queryRunning = true;
+        _queryCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
         _queryCancellation = cancellation;
         SendButton.IsEnabled = false;
@@ -193,40 +185,40 @@ public partial class MainWindow : Window
 
         try
         {
-            CasperResponse response =
-                await _engine.QueryAsync(query, cancellation.Token);
+            CasperResponse response = await _engine.QueryAsync(query, cancellation.Token);
 
             _lastResponse = response;
             _lastQuery = query;
             DisplayCasperResponse(response);
 
+            KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(query, response);
             try
             {
-                KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(query, response);
-                await _database.SaveSessionAsync(
-                    query,
-                    response,
-                    graph,
-                    cancellation.Token);
-
-                if (_graphWindow is not null)
-                    _graphWindow.UpdateGraph(graph);
+                _database.SaveSession(query, response, graph);
+                DatabaseStatusText.Text = "Local database ready";
             }
             catch (Exception databaseException)
             {
                 DatabaseStatusText.Text = "Database write failed";
                 StatusText.Text = $"Casper completed · storage warning: {databaseException.Message}";
             }
+
+            if (_graphWindow is not null)
+                _graphWindow.UpdateGraph(graph);
+        }
+        catch (TimeoutException exception)
+        {
+            AddChatMessage("TIMEOUT / مهلة", exception.Message, isUser: false);
+            StatusText.Text = "Casper engine timed out";
+            EngineBadgeText.Text = "TIMEOUT";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Casper query cancelled";
         }
         catch (Exception exception)
         {
-            if (exception is OperationCanceledException)
-            {
-                StatusText.Text = "Casper query cancelled";
-                return;
-            }
-
-            AddChatMessage("ERROR / خطأ", exception.ToString(), isUser: false);
+            AddChatMessage("ERROR / خطأ", exception.Message, isUser: false);
             StatusText.Text = "Casper engine query failed";
             EngineBadgeText.Text = "ERROR";
         }
@@ -250,11 +242,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(
-            _lastQuery,
-            _lastResponse);
-
-        ShowGraph(graph);
+        ShowGraph(KnowledgeGraph.FromCasperResponse(_lastQuery, _lastResponse));
     }
 
     private void Knowledge_Click(object? sender, RoutedEventArgs e)
@@ -270,7 +258,6 @@ public partial class MainWindow : Window
 
     private void ShowGraph(KnowledgeGraph graph)
     {
-
         if (_graphWindow is null)
         {
             _graphWindow = new GraphWindow(graph);
@@ -295,79 +282,67 @@ public partial class MainWindow : Window
             _historyWindow.Closed += (_, _) => _historyWindow = null;
         }
 
-        _historyWindow.Load(_database.GetRecentSessions());
-
-        if (_historyWindow.IsVisible)
-            _historyWindow.Activate();
-        else
-            _historyWindow.Show(this);
+        try
+        {
+            _historyWindow.Load(_database.GetRecentSessions());
+            if (_historyWindow.IsVisible)
+                _historyWindow.Activate();
+            else
+                _historyWindow.Show(this);
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"History unavailable: {exception.Message}";
+        }
     }
 
     private void DisplayCasperResponse(CasperResponse response)
     {
-        string answer =
-            string.IsNullOrWhiteSpace(response.Answer)
-                ? response.Error ?? "No answer returned."
-                : response.Answer;
+        string answer = string.IsNullOrWhiteSpace(response.Answer)
+            ? response.Error ?? "No answer returned."
+            : response.Answer;
 
         AddChatMessage("CASPER / كاسبر", WebUtility.HtmlDecode(answer), isUser: false);
 
         ConfidenceText.Text =
-            $"Confidence: {response.Confidence:0.000} | " +
-            $"{response.ElapsedMilliseconds} ms";
+            $"Confidence: {response.Confidence:0.000} | {response.ElapsedMilliseconds} ms";
 
-        ProofText.Text =
-            string.IsNullOrWhiteSpace(response.Proof)
-                ? "Proof: -"
-                : $"Proof: {ShortHash(response.Proof)}";
+        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof)
+            ? "Proof: -"
+            : $"Proof: {ShortHash(response.Proof)}";
 
         SourcesTextBox.Text = FormatSources(response.Sources);
 
         StatusText.Text =
-            $"Casper completed | Exit {response.ExitCode} | " +
-            $"{response.SourceCount} sources";
+            $"Casper completed | Exit {response.ExitCode} | {response.SourceCount} sources";
 
-        EngineBadgeText.Text =
-            response.ExitCode == 0
-                ? "ONLINE"
-                : $"EXIT {response.ExitCode}";
+        EngineBadgeText.Text = response.ExitCode == 0 ? "ONLINE" : $"EXIT {response.ExitCode}";
     }
 
-    private static string FormatSources(
-        IReadOnlyList<CasperSource> sources)
+    private static string FormatSources(IReadOnlyList<CasperSource> sources)
     {
         if (sources.Count == 0)
             return "No sources returned.";
 
         var builder = new StringBuilder();
-
         for (var index = 0; index < sources.Count; index++)
         {
             CasperSource source = sources[index];
             builder.Append('[')
                 .Append(source.Number == 0 ? index + 1 : source.Number)
                 .Append("] ")
-                .AppendLine(
-                    string.IsNullOrWhiteSpace(source.Title)
-                        ? "Untitled source"
-                        : SourceTextNormalizer.DecodeHtml(source.Title));
+                .AppendLine(string.IsNullOrWhiteSpace(source.Title)
+                    ? "Untitled source"
+                    : SourceTextNormalizer.DecodeHtml(source.Title));
 
             builder.Append("Score: ")
-                .AppendLine(source.Score.ToString(
-                    "0.000",
-                    CultureInfo.InvariantCulture));
+                .AppendLine(source.Score.ToString("0.000", CultureInfo.InvariantCulture));
 
             if (!string.IsNullOrWhiteSpace(source.Url))
-            {
-                builder.Append("URL: ")
-                    .AppendLine(SourceTextNormalizer.NormalizeUrl(source.Url));
-            }
+                builder.Append("URL: ").AppendLine(SourceTextNormalizer.NormalizeUrl(source.Url));
 
             if (!string.IsNullOrWhiteSpace(source.Snippet))
-            {
-                builder.AppendLine(
-                        SourceTextNormalizer.DecodeHtml(source.Snippet));
-            }
+                builder.AppendLine(SourceTextNormalizer.DecodeHtml(source.Snippet));
 
             builder.AppendLine();
         }
@@ -393,7 +368,7 @@ public partial class MainWindow : Window
     {
         DatabaseStatusText.Text = _database.IsReady
             ? "Local database ready"
-            : "Local database unavailable";
+            : $"Local database unavailable{(_database.Error is null ? string.Empty : $": {_database.Error}")}";
     }
 
     private void LoadKnowledgeBase()
@@ -401,16 +376,14 @@ public partial class MainWindow : Window
         try
         {
             _knowledgeBase = KnowledgeBaseCatalog.LoadDefault();
-
             if (_database.IsReady)
                 _database.SeedKnowledgeBase(_knowledgeBase);
-
             UpdateKnowledgeStatus();
         }
-        catch
+        catch (Exception exception)
         {
             _knowledgeBase = null;
-            UpdateKnowledgeStatus();
+            KnowledgeStatusText.Text = $"Knowledge base unavailable: {exception.Message}";
         }
     }
 
@@ -457,31 +430,19 @@ public partial class MainWindow : Window
 
     private void AutoDirection()
     {
-        InputTextBox.FlowDirection =
-            DirectionDetector.ContainsArabic(
-                InputTextBox.Text ?? string.Empty)
-                ? Avalonia.Media.FlowDirection.RightToLeft
-                : Avalonia.Media.FlowDirection.LeftToRight;
+        InputTextBox.FlowDirection = DirectionDetector.ContainsArabic(InputTextBox.Text ?? string.Empty)
+            ? Avalonia.Media.FlowDirection.RightToLeft
+            : Avalonia.Media.FlowDirection.LeftToRight;
     }
 
     private void Render()
     {
         string source = InputTextBox.Text ?? string.Empty;
-
-        OutputTextBox.Text =
-            DeterministicConverter.Convert(source, _format);
-
-        StatusText.Text =
-            $"{_format.ToString().ToUpperInvariant()} | " +
-            $"{source.Length} chars";
+        OutputTextBox.Text = DeterministicConverter.Convert(source, _format);
+        StatusText.Text = $"{_format.ToString().ToUpperInvariant()} | {source.Length} chars";
     }
 
-    private static string ShortHash(string value)
-    {
-        return value.Length <= 12
-            ? value
-            : value[..12];
-    }
+    private static string ShortHash(string value) => value.Length <= 12 ? value : value[..12];
 
     private enum DirectionMode
     {
@@ -490,4 +451,3 @@ public partial class MainWindow : Window
         Ltr
     }
 }
-
