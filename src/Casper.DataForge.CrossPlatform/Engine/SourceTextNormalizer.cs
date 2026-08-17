@@ -29,29 +29,25 @@ public static class SourceTextNormalizer
             return string.Empty;
 
         if (result.StartsWith("//", StringComparison.Ordinal))
-            return "https:" + result;
+            result = "https:" + result;
 
-        if (Uri.TryCreate(result, UriKind.Absolute, out Uri? absolute) &&
-            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        if (!Uri.TryCreate(result, UriKind.Absolute, out Uri? absolute) ||
+            (!absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+             !absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            return result;
+
+        var builder = new UriBuilder(absolute)
         {
-            var builder = new UriBuilder(absolute)
-            {
-                Fragment = string.Empty
-            };
+            Fragment = string.Empty
+        };
 
-            if (builder.Path.Length == 0)
-                builder.Path = "/";
+        if (builder.Path.Length == 0)
+            builder.Path = "/";
 
-            if ((builder.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && builder.Port == 80) ||
-                (builder.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) && builder.Port == 443))
-            {
-                builder.Port = -1;
-            }
+        if ((builder.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && builder.Port == 80) ||
+            (builder.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) && builder.Port == 443))
+            builder.Port = -1;
 
-            return builder.Uri.AbsoluteUri;
-        }
-
-        return result;
+        return builder.Uri.AbsoluteUri;
     }
 }
