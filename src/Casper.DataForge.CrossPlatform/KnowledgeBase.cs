@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Casper.DataForge.CrossPlatform;
 
@@ -35,21 +34,11 @@ public sealed record KnowledgeBaseCatalog(
 
     public static KnowledgeBaseCatalog LoadDefault()
     {
-        string path = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "KnowledgeBase",
-            "knowledge.seed.json");
-
+        string path = Path.Combine(AppContext.BaseDirectory, "Assets", "KnowledgeBase", "knowledge.seed.json");
         if (!File.Exists(path))
-            throw new FileNotFoundException(
-                "Knowledge base seed was not found.",
-                path);
+            throw new FileNotFoundException("Knowledge base seed was not found.", path);
 
-        KnowledgeBaseCatalog? catalog = JsonSerializer.Deserialize<KnowledgeBaseCatalog>(
-            File.ReadAllText(path),
-            JsonOptions);
-
+        KnowledgeBaseCatalog? catalog = JsonSerializer.Deserialize<KnowledgeBaseCatalog>(File.ReadAllText(path), JsonOptions);
         if (catalog is null)
             throw new InvalidDataException("Knowledge base seed is empty.");
 
@@ -59,26 +48,15 @@ public sealed record KnowledgeBaseCatalog(
 
     public KnowledgeGraph ToGraph()
     {
-        var nodes = Nodes
-            .Select(node => new GraphNode(
-                node.Id,
-                $"{node.NameEn} / {node.NameAr}",
-                "knowledge"))
-            .ToList();
-
-        var edges = Edges
-            .Select(edge => new GraphEdge(edge.From, edge.To, edge.Relation))
-            .ToList();
-
+        var nodes = Nodes.Select(node => new GraphNode(node.Id, $"{node.NameEn} / {node.NameAr}", "knowledge")).ToList();
+        var edges = Edges.Select(edge => new GraphEdge(edge.From, edge.To, edge.Relation)).ToList();
         return new KnowledgeGraph(nodes, edges);
     }
 
     private void Validate()
     {
         if (SchemaVersion != 1)
-            throw new InvalidDataException(
-                $"Unsupported knowledge base schema version: {SchemaVersion}.");
-
+            throw new InvalidDataException($"Unsupported knowledge base schema version: {SchemaVersion}.");
         if (string.IsNullOrWhiteSpace(CatalogId))
             throw new InvalidDataException("Knowledge base catalog id is required.");
 
@@ -91,23 +69,17 @@ public sealed record KnowledgeBaseCatalog(
                 string.IsNullOrWhiteSpace(node.Domain) ||
                 string.IsNullOrWhiteSpace(node.SummaryEn) ||
                 string.IsNullOrWhiteSpace(node.SummaryAr))
-            {
-                throw new InvalidDataException(
-                    $"Knowledge node '{node.Id}' is incomplete.");
-            }
+                throw new InvalidDataException($"Knowledge node '{node.Id}' is incomplete.");
 
             if (!ids.Add(node.Id))
-                throw new InvalidDataException(
-                    $"Duplicate knowledge node id: {node.Id}.");
+                throw new InvalidDataException($"Duplicate knowledge node id: {node.Id}.");
         }
 
         var edgeKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (KnowledgeEdgeSeed edge in Edges)
         {
             if (!ids.Contains(edge.From) || !ids.Contains(edge.To))
-                throw new InvalidDataException(
-                    $"Knowledge edge references an unknown node: {edge.From} -> {edge.To}.");
-
+                throw new InvalidDataException($"Knowledge edge references an unknown node: {edge.From} -> {edge.To}.");
             if (edge.From == edge.To || string.IsNullOrWhiteSpace(edge.Relation))
                 throw new InvalidDataException("Knowledge edges must be directed and labelled.");
 
