@@ -5,7 +5,6 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Globalization;
-using System.Security.Cryptography;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -113,22 +112,20 @@ public partial class MainWindow : Window
     private async void Save_Click(object? sender, RoutedEventArgs e)
     {
         string extension = _format == OutputFormat.Json ? "json" : "jsonl";
-
         try
         {
-            var file = await StorageProvider.SaveFilePickerAsync(
-                new FilePickerSaveOptions
-                {
-                    SuggestedFileName = $"dataforge.{extension}",
-                    DefaultExtension = extension,
-                    FileTypeChoices =
-                    [
-                        new FilePickerFileType(_format == OutputFormat.Json ? "JSON" : "JSON Lines")
-                        {
-                            Patterns = [$"*.{extension}"]
-                        }
-                    ]
-                });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                SuggestedFileName = $"dataforge.{extension}",
+                DefaultExtension = extension,
+                FileTypeChoices =
+                [
+                    new FilePickerFileType(_format == OutputFormat.Json ? "JSON" : "JSON Lines")
+                    {
+                        Patterns = [$"*.{extension}"]
+                    }
+                ]
+            });
 
             if (file is null)
                 return;
@@ -187,6 +184,7 @@ public partial class MainWindow : Window
             DisplayCasperResponse(response);
 
             KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(query, response);
+            graph.Validate();
             try
             {
                 _database.SaveSession(query, response, graph);
@@ -228,6 +226,36 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void ValidateResponseEvidence(CasperResponse response)
+    {
+        if (response.ExitCode != 0)
+            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}");
+        if (response.SourceCount != response.Sources.Count)
+            throw new InvalidDataException($"Source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
+        if (!string.IsNullOrWhiteSpace(response.Proof) && !IsSha256(response.Proof))
+            throw new InvalidDataException("Proof is not a canonical SHA-256 value.");
+        if (!string.IsNullOrWhiteSpace(response.ProofFile))
+        {
+            string proofPath = response.ProofFile;
+            if (!Path.IsPathRooted(proofPath))
+                proofPath = Path.Combine(AppContext.BaseDirectory, proofPath);
+            if (!File.Exists(proofPath))
+                throw new InvalidDataException($"Proof file does not exist: {response.ProofFile}");
+        }
+        if (double.IsNaN(response.Confidence) || double.IsInfinity(response.Confidence) || response.Confidence < 0.0 || response.Confidence > 1.0)
+            throw new InvalidDataException("Confidence is outside [0,1].");
+    }
+
+    private static bool IsSha256(string value)
+    {
+        if (value.Length != 64)
+            return false;
+        foreach (char c in value)
+            if (!Uri.IsHexDigit(c))
+                return false;
+        return true;
+    }
+
     private void Graph_Click(object? sender, RoutedEventArgs e)
     {
         if (_lastResponse is null)
@@ -236,7 +264,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        ShowGraph(KnowledgeGraph.FromCasperResponse(_lastQuery, _lastResponse));
+        KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(_lastQuery, _lastResponse);
+        graph.Validate();
+        ShowGraph(graph);
     }
 
     private void Knowledge_Click(object? sender, RoutedEventArgs e)
@@ -252,6 +282,7 @@ public partial class MainWindow : Window
 
     private void ShowGraph(KnowledgeGraph graph)
     {
+        graph.Validate();
         if (_graphWindow is null)
         {
             _graphWindow = new GraphWindow(graph);
@@ -298,42 +329,10 @@ public partial class MainWindow : Window
 
         AddChatMessage("CASPER / كاسبر", WebUtility.HtmlDecode(answer), isUser: false);
         ConfidenceText.Text = $"Confidence: {response.Confidence:0.000} | {response.ElapsedMilliseconds} ms";
-        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof)
-            ? "Proof: -"
-            : $"Proof: {ShortHash(response.Proof)}";
+        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof) ? "Proof: -" : $"Proof: {ShortHash(response.Proof)}";
         SourcesTextBox.Text = FormatSources(response.Sources);
         StatusText.Text = $"Casper completed | Exit {response.ExitCode} | {response.SourceCount} sources";
         EngineBadgeText.Text = response.ExitCode == 0 ? "ONLINE" : $"EXIT {response.ExitCode}";
-    }
-
-    private static void ValidateResponseEvidence(CasperResponse response)
-    {
-        if (response.ExitCode != 0)
-            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}");
-        if (response.SourceCount != response.Sources.Count)
-            throw new InvalidDataException($"Source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
-        if (!string.IsNullOrWhiteSpace(response.Proof) && !IsSha256(response.Proof))
-            throw new InvalidDataException("Proof is not a canonical SHA-256 value.");
-        if (!string.IsNullOrWhiteSpace(response.ProofFile))
-        {
-            string proofPath = response.ProofFile;
-            if (!Path.IsPathRooted(proofPath))
-                proofPath = Path.Combine(AppContext.BaseDirectory, proofPath);
-            if (!File.Exists(proofPath))
-                throw new InvalidDataException($"Proof file does not exist: {response.ProofFile}");
-        }
-        if (double.IsNaN(response.Confidence) || double.IsInfinity(response.Confidence) || response.Confidence < 0.0 || response.Confidence > 1.0)
-            throw new InvalidDataException("Confidence is outside [0,1].");
-    }
-
-    private static bool IsSha256(string value)
-    {
-        if (value.Length != 64)
-            return false;
-        foreach (char c in value)
-            if (!Uri.IsHexDigit(c))
-                return false;
-        return true;
     }
 
     private static string FormatSources(IReadOnlyList<CasperSource> sources)
@@ -397,9 +396,7 @@ public partial class MainWindow : Window
 
     private void UpdateKnowledgeStatus()
     {
-        KnowledgeStatusText.Text = _knowledgeBase is null
-            ? "Knowledge base unavailable"
-            : $"Knowledge base ready · {_knowledgeBase.Nodes.Count} nodes";
+        KnowledgeStatusText.Text = _knowledgeBase is null ? "Knowledge base unavailable" : $"Knowledge base ready · {_knowledgeBase.Nodes.Count} nodes";
     }
 
     private void AddChatMessage(string role, string text, bool isUser)
