@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Globalization;
+using System.Security.Cryptography;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -38,10 +39,7 @@ public partial class MainWindow : Window
         UpdateDatabaseStatus();
         LoadKnowledgeBase();
         Render();
-        AddChatMessage(
-            "CASPER / كاسبر",
-            "Ready for a grounded query. / جاهز لاستعلام موثق.",
-            isUser: false);
+        AddChatMessage("CASPER / كاسبر", "Ready for a grounded query. / جاهز لاستعلام موثق.", isUser: false);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -59,7 +57,6 @@ public partial class MainWindow : Window
     {
         if (_directionMode == DirectionMode.Auto)
             AutoDirection();
-
         Render();
     }
 
@@ -173,19 +170,17 @@ public partial class MainWindow : Window
         _queryCancellation = cancellation;
         SendButton.IsEnabled = false;
         SendButton.Content = "Running...";
-
         SourcesTextBox.Text = string.Empty;
         ConfidenceText.Text = "Confidence: -";
         ProofText.Text = "Proof: -";
         StatusText.Text = "Casper is processing the query";
         AddChatMessage("YOU / أنت", query, isUser: true);
-        ShowGraph(new KnowledgeGraph(
-            [new GraphNode("query", query, "query")],
-            Array.Empty<GraphEdge>()));
+        ShowGraph(new KnowledgeGraph([new GraphNode("query", query, "query")], Array.Empty<GraphEdge>()));
 
         try
         {
             CasperResponse response = await _engine.QueryAsync(query, cancellation.Token);
+            ValidateResponseEvidence(response);
 
             _lastResponse = response;
             _lastQuery = query;
@@ -203,8 +198,7 @@ public partial class MainWindow : Window
                 StatusText.Text = $"Casper completed · storage warning: {databaseException.Message}";
             }
 
-            if (_graphWindow is not null)
-                _graphWindow.UpdateGraph(graph);
+            _graphWindow?.UpdateGraph(graph);
         }
         catch (TimeoutException exception)
         {
@@ -303,20 +297,43 @@ public partial class MainWindow : Window
             : response.Answer;
 
         AddChatMessage("CASPER / كاسبر", WebUtility.HtmlDecode(answer), isUser: false);
-
-        ConfidenceText.Text =
-            $"Confidence: {response.Confidence:0.000} | {response.ElapsedMilliseconds} ms";
-
+        ConfidenceText.Text = $"Confidence: {response.Confidence:0.000} | {response.ElapsedMilliseconds} ms";
         ProofText.Text = string.IsNullOrWhiteSpace(response.Proof)
             ? "Proof: -"
             : $"Proof: {ShortHash(response.Proof)}";
-
         SourcesTextBox.Text = FormatSources(response.Sources);
-
-        StatusText.Text =
-            $"Casper completed | Exit {response.ExitCode} | {response.SourceCount} sources";
-
+        StatusText.Text = $"Casper completed | Exit {response.ExitCode} | {response.SourceCount} sources";
         EngineBadgeText.Text = response.ExitCode == 0 ? "ONLINE" : $"EXIT {response.ExitCode}";
+    }
+
+    private static void ValidateResponseEvidence(CasperResponse response)
+    {
+        if (response.ExitCode != 0)
+            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}");
+        if (response.SourceCount != response.Sources.Count)
+            throw new InvalidDataException($"Source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
+        if (!string.IsNullOrWhiteSpace(response.Proof) && !IsSha256(response.Proof))
+            throw new InvalidDataException("Proof is not a canonical SHA-256 value.");
+        if (!string.IsNullOrWhiteSpace(response.ProofFile))
+        {
+            string proofPath = response.ProofFile;
+            if (!Path.IsPathRooted(proofPath))
+                proofPath = Path.Combine(AppContext.BaseDirectory, proofPath);
+            if (!File.Exists(proofPath))
+                throw new InvalidDataException($"Proof file does not exist: {response.ProofFile}");
+        }
+        if (double.IsNaN(response.Confidence) || double.IsInfinity(response.Confidence) || response.Confidence < 0.0 || response.Confidence > 1.0)
+            throw new InvalidDataException("Confidence is outside [0,1].");
+    }
+
+    private static bool IsSha256(string value)
+    {
+        if (value.Length != 64)
+            return false;
+        foreach (char c in value)
+            if (!Uri.IsHexDigit(c))
+                return false;
+        return true;
     }
 
     private static string FormatSources(IReadOnlyList<CasperSource> sources)
@@ -328,22 +345,13 @@ public partial class MainWindow : Window
         for (var index = 0; index < sources.Count; index++)
         {
             CasperSource source = sources[index];
-            builder.Append('[')
-                .Append(source.Number == 0 ? index + 1 : source.Number)
-                .Append("] ")
-                .AppendLine(string.IsNullOrWhiteSpace(source.Title)
-                    ? "Untitled source"
-                    : SourceTextNormalizer.DecodeHtml(source.Title));
-
-            builder.Append("Score: ")
-                .AppendLine(source.Score.ToString("0.000", CultureInfo.InvariantCulture));
-
+            builder.Append('[').Append(source.Number == 0 ? index + 1 : source.Number).Append("] ")
+                .AppendLine(string.IsNullOrWhiteSpace(source.Title) ? "Untitled source" : SourceTextNormalizer.DecodeHtml(source.Title));
+            builder.Append("Score: ").AppendLine(source.Score.ToString("0.000", CultureInfo.InvariantCulture));
             if (!string.IsNullOrWhiteSpace(source.Url))
                 builder.Append("URL: ").AppendLine(SourceTextNormalizer.NormalizeUrl(source.Url));
-
             if (!string.IsNullOrWhiteSpace(source.Snippet))
                 builder.AppendLine(SourceTextNormalizer.DecodeHtml(source.Snippet));
-
             builder.AppendLine();
         }
 
