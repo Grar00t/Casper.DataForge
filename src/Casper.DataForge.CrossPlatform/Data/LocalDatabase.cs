@@ -64,7 +64,6 @@ public sealed class LocalDatabase : IDisposable
 
             using SqliteDataReader reader = command.ExecuteReader();
             var sessions = new List<QuerySessionSummary>();
-
             while (reader.Read())
             {
                 DateTimeOffset created = DateTimeOffset.TryParse(
@@ -90,9 +89,8 @@ public sealed class LocalDatabase : IDisposable
     {
         ArgumentNullException.ThrowIfNull(catalog);
         EnsureNotDisposed();
-
         if (!IsReady)
-            return;
+            throw new InvalidOperationException($"Database is not ready: {Error ?? "unknown error"}");
 
         lock (_gate)
         {
@@ -166,9 +164,12 @@ public sealed class LocalDatabase : IDisposable
 
         if (!IsReady)
             throw new InvalidOperationException($"Database is not ready: {Error ?? "unknown error"}");
-
+        if (response.ExitCode != 0)
+            throw new ArgumentException("Cannot persist a failed engine response.", nameof(response));
         if (response.SourceCount < 0)
             throw new ArgumentException("Response source count cannot be negative.", nameof(response));
+        if (response.Sources is null || response.SourceCount != response.Sources.Count)
+            throw new ArgumentException("Response source count does not match the source collection.", nameof(response));
 
         lock (_gate)
         {
@@ -260,7 +261,6 @@ public sealed class LocalDatabase : IDisposable
         {
             if (_disposed)
                 return;
-
             _disposed = true;
             _connection.Dispose();
         }
@@ -289,20 +289,14 @@ public sealed class LocalDatabase : IDisposable
         int currentVersion = Convert.ToInt32(command.ExecuteScalar());
 
         if (currentVersion > SchemaVersion)
-        {
-            throw new InvalidOperationException(
-                $"Database schema version {currentVersion} is newer than supported version {SchemaVersion}.");
-        }
-
+            throw new InvalidOperationException($"Database schema version {currentVersion} is newer than supported version {SchemaVersion}.");
         if (currentVersion >= SchemaVersion)
             return;
 
         using var transaction = _connection.BeginTransaction();
         if (currentVersion < 1)
         {
-            Execute(
-                transaction,
-                """
+            Execute(transaction, """
                 CREATE TABLE IF NOT EXISTS query_sessions (
                     id TEXT PRIMARY KEY,
                     query TEXT NOT NULL,
@@ -349,9 +343,7 @@ public sealed class LocalDatabase : IDisposable
 
         if (currentVersion < 2)
         {
-            Execute(
-                transaction,
-                """
+            Execute(transaction, """
                 CREATE TABLE IF NOT EXISTS knowledge_nodes (
                     id TEXT PRIMARY KEY,
                     name_en TEXT NOT NULL,
@@ -395,10 +387,8 @@ public sealed class LocalDatabase : IDisposable
         using var command = transaction.Connection!.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = sql;
-
         foreach ((string name, object? value) in values)
             command.Parameters.AddWithValue(name, value ?? DBNull.Value);
-
         command.ExecuteNonQuery();
     }
 }
