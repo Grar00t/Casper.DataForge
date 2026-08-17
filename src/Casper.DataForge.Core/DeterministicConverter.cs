@@ -26,13 +26,13 @@ public static class DeterministicConverter
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.Default
     };
 
     private static readonly JsonSerializerOptions JsonLineOptions = new()
     {
         WriteIndented = false,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.Default
     };
 
     private static readonly (string Open, string Close, string Type)[] Markers =
@@ -48,20 +48,12 @@ public static class DeterministicConverter
         source ??= string.Empty;
         IReadOnlyList<Segment> segments = Split(source);
 
-        if (format == OutputFormat.Json)
-            return JsonSerializer.Serialize(
-                new ForgeDocument(source, segments),
-                JsonOptions);
-
-        var builder = new StringBuilder();
-        foreach (Segment segment in segments)
+        return format switch
         {
-            builder.AppendLine(JsonSerializer.Serialize(
-                segment,
-                JsonLineOptions));
-        }
-
-        return builder.ToString().TrimEnd('\r', '\n');
+            OutputFormat.Json => JsonSerializer.Serialize(new ForgeDocument(source, segments), JsonOptions),
+            OutputFormat.Jsonl => ToJsonLines(segments),
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported output format.")
+        };
     }
 
     public static IReadOnlyList<Segment> Split(string? source)
@@ -73,9 +65,7 @@ public static class DeterministicConverter
 
         while (position < source.Length)
         {
-            (int Start, string Open, string Close, string Type) marker =
-                FindNextMarker(source, position);
-
+            var marker = FindNextMarker(source, position);
             if (marker.Start < 0)
                 break;
 
@@ -92,6 +82,18 @@ public static class DeterministicConverter
         return result;
     }
 
+    private static string ToJsonLines(IReadOnlyList<Segment> segments)
+    {
+        var builder = new StringBuilder();
+        foreach (Segment segment in segments)
+        {
+            builder.Append(JsonSerializer.Serialize(segment, JsonLineOptions));
+            builder.Append('\n');
+        }
+
+        return builder.ToString().TrimEnd('\r', '\n');
+    }
+
     private static (int Start, string Open, string Close, string Type) FindNextMarker(
         string source,
         int from)
@@ -101,7 +103,6 @@ public static class DeterministicConverter
         foreach ((string open, string close, string type) in Markers)
         {
             int index = source.IndexOf(open, from, StringComparison.Ordinal);
-
             if (index >= 0 && (best.Item1 < 0 || index < best.Item1))
                 best = (index, open, close, type);
         }
@@ -115,10 +116,7 @@ public static class DeterministicConverter
     {
         int searchFrom = marker.Start + marker.Open.Length;
         int close = source.IndexOf(marker.Close, searchFrom, StringComparison.Ordinal);
-
-        return close < 0
-            ? source.Length
-            : close + marker.Close.Length;
+        return close < 0 ? source.Length : close + marker.Close.Length;
     }
 
     private static void Add(
