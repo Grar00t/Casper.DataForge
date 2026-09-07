@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private bool _queryRunning;
     private CasperResponse? _lastResponse;
     private string _lastQuery = string.Empty;
+    private string _lastOutputDigest = string.Empty;
     private KnowledgeBaseCatalog? _knowledgeBase;
     private HistoryWindow? _historyWindow;
     private GraphWindow? _graphWindow;
@@ -115,6 +116,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void CopyDigest_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is null)
+            {
+                StatusText.Text = "Clipboard unavailable";
+                return;
+            }
+
+            await clipboard.SetTextAsync(_lastOutputDigest);
+            StatusText.Text = "SHA-256 copied";
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"Copy SHA-256 failed: {exception.Message}";
+        }
+    }
+
     private async void Save_Click(object? sender, RoutedEventArgs e)
     {
         string extension = _format == OutputFormat.Json ? "json" : "jsonl";
@@ -166,10 +187,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_engine.IsAvailable)
+        EngineIntegrityState integrityState = _engine.IntegrityState;
+        if (integrityState == EngineIntegrityState.Missing)
         {
             UpdateEngineStatus();
             StatusText.Text = "Casper engine is unavailable";
+            return;
+        }
+
+        if (integrityState == EngineIntegrityState.Invalid)
+        {
+            UpdateEngineStatus();
+            StatusText.Text = "Casper engine integrity check failed";
             return;
         }
 
@@ -183,8 +212,10 @@ public partial class MainWindow : Window
         SendButton.Content = "Running...";
         SourcesTextBox.Text = string.Empty;
         ConfidenceText.Text = "Confidence: -";
-        ProofText.Text = "Proof: -";
-        StatusText.Text = "Casper is processing the query";
+        ProofText.Text = "Proof digest: -";
+        StatusText.Text = integrityState == EngineIntegrityState.Unpinned
+            ? "Casper is processing the query · engine unpinned"
+            : "Casper is processing the query";
 
         AddChatMessage("YOU / أنت", query, isUser: true);
 
@@ -243,7 +274,7 @@ public partial class MainWindow : Window
                 "Query cancelled.",
                 isUser: false);
             StatusText.Text = "Casper query cancelled";
-            EngineBadgeText.Text = _engine.IsAvailable ? "READY" : "MISSING";
+            UpdateEngineStatus();
         }
         catch (Exception exception)
         {
@@ -349,9 +380,23 @@ public partial class MainWindow : Window
             $"Confidence: {response.Confidence:0.000} | " +
             $"{response.ElapsedMilliseconds} ms";
 
-        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof)
-            ? "Proof: -"
-            : $"Proof: {ShortHash(response.Proof)}";
+        if (response.ProofFileBound)
+        {
+            string boundHash = response.ProofFileDeclaredHash ?? response.Proof ?? string.Empty;
+            ProofText.Text = $"Proof file bound: {ShortHash(boundHash)}";
+        }
+        else if (!string.IsNullOrWhiteSpace(response.Proof))
+        {
+            ProofText.Text = $"Proof digest: {ShortHash(response.Proof)}";
+        }
+        else if (!string.IsNullOrWhiteSpace(response.ProofFile))
+        {
+            ProofText.Text = "Proof file: present";
+        }
+        else
+        {
+            ProofText.Text = "Proof digest: -";
+        }
 
         SourcesTextBox.Text = FormatSources(response.Sources);
 
@@ -419,17 +464,31 @@ public partial class MainWindow : Window
             ? "configured"
             : "bundled";
 
-        if (_engine.IsAvailable)
+        switch (_engine.IntegrityState)
         {
-            EngineStatusText.Text =
-                $"Engine executable detected · {source}";
-            EngineBadgeText.Text = "READY";
-        }
-        else
-        {
-            EngineStatusText.Text =
-                $"Engine executable not found · {source}";
-            EngineBadgeText.Text = "MISSING";
+            case EngineIntegrityState.Missing:
+                EngineStatusText.Text =
+                    $"Engine executable not found · {source}";
+                EngineBadgeText.Text = "MISSING";
+                break;
+
+            case EngineIntegrityState.Verified:
+                EngineStatusText.Text =
+                    $"Engine SHA-256 verified · {source} · {ShortHash(_engine.ComputeSha256())}";
+                EngineBadgeText.Text = "VERIFIED";
+                break;
+
+            case EngineIntegrityState.Unpinned:
+                EngineStatusText.Text =
+                    $"Engine detected · {source} · unpinned · {ShortHash(_engine.ComputeSha256())}";
+                EngineBadgeText.Text = "UNPINNED";
+                break;
+
+            default:
+                EngineStatusText.Text =
+                    $"Engine integrity check failed · {source}";
+                EngineBadgeText.Text = "INVALID";
+                break;
         }
     }
 
@@ -535,8 +594,11 @@ public partial class MainWindow : Window
     private void Render()
     {
         string source = InputTextBox.Text ?? string.Empty;
-        OutputTextBox.Text =
-            DeterministicConverter.Convert(source, _format);
+        string output = DeterministicConverter.Convert(source, _format);
+        _lastOutputDigest = DeterministicConverter.ComputeOutputSha256(output);
+
+        OutputTextBox.Text = output;
+        OutputDigestText.Text = $"SHA-256: {_lastOutputDigest}";
         StatusText.Text =
             $"{_format.ToString().ToUpperInvariant()} | {source.Length} chars";
     }

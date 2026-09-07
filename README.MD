@@ -10,6 +10,7 @@ The Forge converter:
 - segments text, fenced code, and LaTeX markers
 - emits deterministic JSON or JSONL
 - tracks source offsets and lengths
+- computes a SHA-256 digest for the exact rendered output
 - runs locally without a network dependency
 - does not generate, summarize, rewrite, or complete source text
 
@@ -45,7 +46,7 @@ Casper.DataForge/
 
 `src/Casper.DataForge.CrossPlatform` is the primary Avalonia application.
 
-The repository-root WPF project is the legacy Windows implementation. It remains build-checked on Windows but is not the primary application.
+The repository-root WPF project is the legacy Windows implementation. It remains included as a Windows compatibility build target but is not the primary application.
 
 ## Deterministic output
 
@@ -70,6 +71,8 @@ JSONL emits one compact segment object per line.
 
 For a fixed application version, the converter does not add timestamps, random identifiers, generated text, or external data.
 
+The primary UI displays the full SHA-256 digest of the exact JSON or JSONL output. `Copy SHA` copies that digest without modifying the output.
+
 ## Casper engine integration
 
 The repository currently includes a Windows `casper.exe` plus a SHA-256 manifest. Linux and macOS native Casper binaries are not included.
@@ -87,7 +90,16 @@ Optional external-engine integrity pin:
 CASPER_DATAFORGE_ENGINE_SHA256=<64-hex-sha256>
 ```
 
-Bundled engines use a `CASPER-EXE-MANIFEST.txt` located beside the executable. If the manifest exists and is malformed or does not match the executable file name or digest, the query is rejected.
+Bundled engines require a `CASPER-EXE-MANIFEST.txt` located beside the executable. A missing, malformed, file-name-mismatched, or digest-mismatched bundled manifest prevents the engine from being treated as valid.
+
+External configured engines may run without a pin, but the UI reports them as `UNPINNED` rather than `VERIFIED`.
+
+Engine integrity states are:
+
+- `MISSING`: executable does not exist
+- `UNPINNED`: configured external executable exists but no expected SHA-256 was supplied
+- `VERIFIED`: executable SHA-256 matches its configured pin or required bundled manifest
+- `INVALID`: manifest parsing, file access, or SHA-256 validation failed
 
 The engine client also validates:
 
@@ -102,8 +114,12 @@ The engine client also validates:
 - proof SHA-256 format
 - source SHA-256 format
 - proof-file existence
+- `NIYAH-PROOF-V1` proof-file header
+- proof-file declared hash binding to the response `proof` digest when both are present
 
 Relative `proof_file` values are resolved against the native engine working directory.
+
+`ProofFileBound=true` means the proof file declares the same digest returned in the response. It does not mean the application independently re-executed or mathematically proved the native engine computation.
 
 ## Local persistence
 
@@ -153,9 +169,9 @@ Build the primary application:
 dotnet build src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj -c Release
 ```
 
-Linux and macOS builds no longer fail merely because a platform-specific Casper native executable is absent. The Forge UI remains buildable and usable; the Casper query feature reports the engine as missing until a compatible executable is configured.
+Linux and macOS builds do not require a bundled native Casper executable. The Forge UI remains buildable and usable; the Casper query feature reports the engine as missing until a compatible executable is configured.
 
-On Windows, bundled-engine presence is validated by default.
+On Windows, bundled-engine presence is validated by the project configuration.
 
 To force bundled-engine validation on any build:
 
@@ -173,20 +189,24 @@ dotnet run --project tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.c
 dotnet run --project tests/Casper.Persistence.Smoke/Casper.Persistence.Smoke.csproj -c Release
 ```
 
-The engine-client smoke test does not depend on the bundled Casper executable. It verifies path configuration, SHA-256 pinning, URL normalization, and response validation.
+The core smoke test verifies deterministic conversion, Unicode direction detection, and stable output SHA-256 calculation.
+
+The engine-client smoke test does not depend on the bundled Casper executable. It verifies path configuration, SHA-256 pinning, explicit integrity states, URL normalization, response validation, and proof-file digest binding.
 
 The persistence smoke test verifies SQLite initialization with a path containing a semicolon, knowledge-base reconciliation, duplicate-source graph collapse, and session persistence.
 
 ## Continuous integration
 
-GitHub Actions runs on Ubuntu and Windows and checks:
+The GitHub Actions workflow is configured to target Ubuntu and Windows with:
 
 - Avalonia restore and Release build
 - deterministic converter smoke validation
 - engine-client smoke validation
 - persistence smoke validation
-- bundled Windows Casper SHA-256
+- bundled Windows Casper SHA-256 verification
 - legacy WPF restore and build on Windows
+
+A workflow definition is not evidence of a successful run. CI success must be confirmed from the GitHub Actions result for the specific commit being evaluated.
 
 ## Windows publish
 
@@ -201,13 +221,15 @@ dotnet publish .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatfo
   -o .\release\win-x64
 ```
 
-The native Casper executable must remain in the published `Engine/bin` directory.
+The native Casper executable must remain in the published `Engine/bin` directory with its manifest.
 
 ## Current limitations
 
 - bundled Casper native executable: Windows only
 - Linux Casper package: not included
 - macOS Casper package: not included
+- external engines can be intentionally used without SHA-256 pinning, but are reported as `UNPINNED`
+- proof-file binding checks file metadata against the returned digest; it does not independently prove native-engine semantics
 - code signing: not implemented
 - automated release publishing: not implemented
 - Forge conversion is offline; Casper query networking depends on the configured engine
@@ -221,8 +243,9 @@ The latest documented packaged release remains `v1.1.2`. The source tree is on t
 - Forge conversion does not require network access.
 - No telemetry is intentionally implemented in this repository.
 - Casper queries may use network access through the configured native engine.
-- The bundled Windows engine is hash-checked against its manifest before query execution.
+- Bundled engines require a valid adjacent SHA-256 manifest before query execution.
 - External engine binaries can be pinned with `CASPER_DATAFORGE_ENGINE_SHA256`.
+- The UI distinguishes verified, unpinned, invalid, and missing engine states.
 - The current Windows executable is not code-signed.
 
 ## License

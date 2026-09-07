@@ -12,6 +12,14 @@ using System.Threading.Tasks;
 
 namespace Casper.DataForge.CrossPlatform.Engine;
 
+public enum EngineIntegrityState
+{
+    Missing,
+    Unpinned,
+    Verified,
+    Invalid
+}
+
 public sealed class CasperEngineClient
 {
     public const string EnginePathEnvironmentVariable = "CASPER_DATAFORGE_ENGINE";
@@ -65,13 +73,48 @@ public sealed class CasperEngineClient
 
     public bool IsAvailable => File.Exists(ExecutablePath);
 
+    public EngineIntegrityState IntegrityState
+    {
+        get
+        {
+            if (!IsAvailable)
+                return EngineIntegrityState.Missing;
+
+            try
+            {
+                string? expectedSha256 = ResolveExpectedSha256(ExecutablePath);
+                if (expectedSha256 is null)
+                    return EngineIntegrityState.Unpinned;
+
+                return VerifySha256(expectedSha256)
+                    ? EngineIntegrityState.Verified
+                    : EngineIntegrityState.Invalid;
+            }
+            catch (InvalidDataException)
+            {
+                return EngineIntegrityState.Invalid;
+            }
+            catch (IOException)
+            {
+                return EngineIntegrityState.Invalid;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return EngineIntegrityState.Invalid;
+            }
+            catch (CryptographicException)
+            {
+                return EngineIntegrityState.Invalid;
+            }
+        }
+    }
+
     public string ComputeSha256()
     {
         if (!IsAvailable)
             throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
-        using FileStream stream = File.OpenRead(ExecutablePath);
-        return Convert.ToHexString(SHA256.HashData(stream));
+        return ComputeFileSha256(ExecutablePath);
     }
 
     public bool VerifySha256(string expectedSha256)
@@ -94,8 +137,7 @@ public sealed class CasperEngineClient
             throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
         string executablePath = ExecutablePath;
-        string? expectedHash = _configuredExpectedSha256 ??
-                               (UsesConfiguredExecutable ? null : TryReadBundledSha256(executablePath));
+        string? expectedHash = ResolveExpectedSha256(executablePath);
 
         if (expectedHash is not null && !VerifySha256(expectedHash))
             throw new InvalidDataException("Casper engine SHA-256 does not match the configured or bundled digest.");
@@ -176,8 +218,7 @@ public sealed class CasperEngineClient
         };
 
         ValidateResponse(query, response);
-        response = NormalizeAndValidateProofFile(response, workingDirectory);
-        return response;
+        return ValidateProofFile(response, workingDirectory);
     }
 
     public static void ValidateResponse(string query, CasperResponse response)
@@ -227,21 +268,28 @@ public sealed class CasperEngineClient
         }
     }
 
-    private static CasperResponse NormalizeAndValidateProofFile(
+    public static CasperResponse ValidateProofFile(
         CasperResponse response,
         string workingDirectory)
     {
+        ArgumentNullException.ThrowIfNull(response);
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+            throw new ArgumentException("Working directory cannot be empty.", nameof(workingDirectory));
+
         if (string.IsNullOrWhiteSpace(response.ProofFile))
-            return response;
+            return response with
+            {
+                ProofFileDeclaredHash = null,
+                ProofFileBound = false
+            };
 
         string proofPath;
         try
         {
-            proofPath = response.ProofFile.Trim();
-            if (!Path.IsPathRooted(proofPath))
-                proofPath = Path.GetFullPath(Path.Combine(workingDirectory, proofPath));
-            else
-                proofPath = Path.GetFullPath(proofPath);
+            string requestedPath = response.ProofFile.Trim();
+            proofPath = Path.IsPathRooted(requestedPath)
+                ? Path.GetFullPath(requestedPath)
+                : Path.GetFullPath(Path.Combine(workingDirectory, requestedPath));
         }
         catch (Exception exception) when (
             exception is ArgumentException or
@@ -254,7 +302,55 @@ public sealed class CasperEngineClient
         if (!File.Exists(proofPath))
             throw new InvalidDataException($"Casper proof file does not exist: {response.ProofFile}");
 
-        return response with { ProofFile = proofPath };
+        string declaredHash;
+        try
+        {
+            using var reader = new StreamReader(proofPath, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            string? header = reader.ReadLine();
+            if (!string.Equals(header, "NIYAH-PROOF-V1", StringComparison.Ordinal))
+                throw new InvalidDataException("Casper proof file has an unsupported or missing header.");
+
+            string? hashLine = reader.ReadLine();
+            const string prefix = "hash: ";
+            if (hashLine is null || !hashLine.StartsWith(prefix, StringComparison.Ordinal))
+                throw new InvalidDataException("Casper proof file is missing its declared hash.");
+
+            declaredHash = hashLine[prefix.Length..].Trim();
+            if (!IsSha256(declaredHash))
+                throw new InvalidDataException("Casper proof file declares an invalid SHA-256 value.");
+        }
+        catch (InvalidDataException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidDataException("Casper proof file could not be read.", exception);
+        }
+
+        bool bound = false;
+        if (!string.IsNullOrWhiteSpace(response.Proof))
+        {
+            if (!string.Equals(response.Proof, declaredHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Casper proof file hash does not match the proof digest in the response.");
+
+            bound = true;
+        }
+
+        return response with
+        {
+            ProofFile = proofPath,
+            ProofFileDeclaredHash = declaredHash.ToUpperInvariant(),
+            ProofFileBound = bound
+        };
+    }
+
+    private string? ResolveExpectedSha256(string executablePath)
+    {
+        if (UsesConfiguredExecutable)
+            return _configuredExpectedSha256;
+
+        return ReadBundledSha256(executablePath);
     }
 
     private string ResolveBundledExecutablePath()
@@ -273,15 +369,15 @@ public sealed class CasperEngineClient
         return Path.Combine(AppContext.BaseDirectory, "Engine", "bin", fileName);
     }
 
-    private static string? TryReadBundledSha256(string executablePath)
+    private static string ReadBundledSha256(string executablePath)
     {
         string? directory = Path.GetDirectoryName(executablePath);
         if (directory is null)
-            return null;
+            throw new InvalidDataException("Casper bundled engine directory could not be resolved.");
 
         string manifestPath = Path.Combine(directory, "CASPER-EXE-MANIFEST.txt");
         if (!File.Exists(manifestPath))
-            return null;
+            throw new InvalidDataException($"Casper bundled engine manifest is missing: {manifestPath}");
 
         string? fileName = null;
         string? sha256 = null;
@@ -310,6 +406,12 @@ public sealed class CasperEngineClient
             throw new InvalidDataException($"Casper manifest contains an invalid SHA256=: {manifestPath}");
 
         return sha256.ToUpperInvariant();
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
     }
 
     private static string? FirstNonBlank(string? first, string? second)
@@ -384,6 +486,8 @@ public sealed record CasperResponse
         Array.Empty<CasperSource>();
     [JsonIgnore] public int ExitCode { get; init; }
     [JsonIgnore] public string StandardError { get; init; } = string.Empty;
+    [JsonIgnore] public string? ProofFileDeclaredHash { get; init; }
+    [JsonIgnore] public bool ProofFileBound { get; init; }
 }
 
 public sealed record CasperSource

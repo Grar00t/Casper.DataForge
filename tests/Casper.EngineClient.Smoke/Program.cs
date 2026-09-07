@@ -40,8 +40,16 @@ string tempDirectory =
 Directory.CreateDirectory(tempDirectory);
 string fixtureExecutablePath = Path.Combine(tempDirectory, "engine.bin");
 
+string? previousEngineSha =
+    Environment.GetEnvironmentVariable(
+        CasperEngineClient.EngineSha256EnvironmentVariable);
+
 try
 {
+    Environment.SetEnvironmentVariable(
+        CasperEngineClient.EngineSha256EnvironmentVariable,
+        null);
+
     File.WriteAllText(
         fixtureExecutablePath,
         payload,
@@ -56,6 +64,7 @@ try
     bool configuredPathPass =
         configuredClient.UsesConfiguredExecutable &&
         configuredClient.IsAvailable &&
+        configuredClient.IntegrityState == EngineIntegrityState.Verified &&
         string.Equals(
             configuredClient.ExecutablePath,
             Path.GetFullPath(fixtureExecutablePath),
@@ -71,6 +80,39 @@ try
     if (!configuredPathPass)
     {
         Environment.ExitCode = 2;
+        return;
+    }
+
+    var unpinnedClient =
+        new CasperEngineClient(
+            TimeSpan.FromSeconds(1),
+            fixtureExecutablePath);
+
+    bool unpinnedStatePass =
+        unpinnedClient.IntegrityState == EngineIntegrityState.Unpinned;
+
+    Console.WriteLine($"UNPINNED_ENGINE_STATE_PASS={unpinnedStatePass}");
+
+    if (!unpinnedStatePass)
+    {
+        Environment.ExitCode = 3;
+        return;
+    }
+
+    var mismatchClient =
+        new CasperEngineClient(
+            TimeSpan.FromSeconds(1),
+            fixtureExecutablePath,
+            new string('0', 64));
+
+    bool mismatchStatePass =
+        mismatchClient.IntegrityState == EngineIntegrityState.Invalid;
+
+    Console.WriteLine($"ENGINE_MISMATCH_STATE_PASS={mismatchStatePass}");
+
+    if (!mismatchStatePass)
+    {
+        Environment.ExitCode = 4;
         return;
     }
 
@@ -91,6 +133,7 @@ try
 
         bool environmentPathPass =
             environmentClient.UsesConfiguredExecutable &&
+            environmentClient.IntegrityState == EngineIntegrityState.Verified &&
             string.Equals(
                 environmentClient.ExecutablePath,
                 Path.GetFullPath(fixtureExecutablePath),
@@ -100,7 +143,7 @@ try
 
         if (!environmentPathPass)
         {
-            Environment.ExitCode = 3;
+            Environment.ExitCode = 5;
             return;
         }
     }
@@ -148,7 +191,7 @@ try
 
     if (!responseValidationPass)
     {
-        Environment.ExitCode = 4;
+        Environment.ExitCode = 6;
         return;
     }
 
@@ -168,7 +211,7 @@ try
 
     if (!mismatchRejected)
     {
-        Environment.ExitCode = 5;
+        Environment.ExitCode = 7;
         return;
     }
 
@@ -185,17 +228,81 @@ try
 
     Console.WriteLine($"INVALID_HASH_REJECTED_PASS={invalidHashRejected}");
 
+    if (!invalidHashRejected)
+    {
+        Environment.ExitCode = 8;
+        return;
+    }
+
+    string proofFileName = "casper_fixture.proof";
+    string proofPath = Path.Combine(tempDirectory, proofFileName);
+    File.WriteAllText(
+        proofPath,
+        $"NIYAH-PROOF-V1\nhash: {response.Proof}\nprompt_hash: {new string('C', 64)}\noutput_hash: {new string('D', 64)}\nrules_hash: {new string('0', 64)}\nprompt: {query}\noutput: {response.Answer}\n",
+        new UTF8Encoding(false));
+
+    CasperResponse boundProofResponse =
+        CasperEngineClient.ValidateProofFile(
+            response with { ProofFile = proofFileName },
+            tempDirectory);
+
+    bool proofBindingPass =
+        boundProofResponse.ProofFileBound &&
+        string.Equals(
+            boundProofResponse.ProofFile,
+            Path.GetFullPath(proofPath),
+            StringComparison.Ordinal) &&
+        string.Equals(
+            boundProofResponse.ProofFileDeclaredHash,
+            response.Proof,
+            StringComparison.OrdinalIgnoreCase);
+
+    Console.WriteLine($"PROOF_FILE_BINDING_PASS={proofBindingPass}");
+
+    if (!proofBindingPass)
+    {
+        Environment.ExitCode = 9;
+        return;
+    }
+
+    bool proofMismatchRejected = false;
+    File.WriteAllText(
+        proofPath,
+        $"NIYAH-PROOF-V1\nhash: {new string('E', 64)}\n",
+        new UTF8Encoding(false));
+
+    try
+    {
+        _ = CasperEngineClient.ValidateProofFile(
+            response with { ProofFile = proofFileName },
+            tempDirectory);
+    }
+    catch (InvalidDataException)
+    {
+        proofMismatchRejected = true;
+    }
+
+    Console.WriteLine($"PROOF_FILE_MISMATCH_REJECTED_PASS={proofMismatchRejected}");
+
     bool pass =
         configuredPathPass &&
+        unpinnedStatePass &&
+        mismatchStatePass &&
         responseValidationPass &&
         mismatchRejected &&
-        invalidHashRejected;
+        invalidHashRejected &&
+        proofBindingPass &&
+        proofMismatchRejected;
 
     Console.WriteLine($"CLIENT_SMOKE_PASS={pass}");
-    Environment.ExitCode = pass ? 0 : 6;
+    Environment.ExitCode = pass ? 0 : 10;
 }
 finally
 {
+    Environment.SetEnvironmentVariable(
+        CasperEngineClient.EngineSha256EnvironmentVariable,
+        previousEngineSha);
+
     try
     {
         Directory.Delete(tempDirectory, recursive: true);

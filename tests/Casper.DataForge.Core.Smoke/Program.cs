@@ -50,6 +50,18 @@ bool jsonlPass =
             StringSplitOptions.RemoveEmptyEntries)
         .Length == segments.Count;
 
+string jsonDigest =
+    DeterministicConverter.ComputeOutputSha256(json);
+string jsonDigestAgain =
+    DeterministicConverter.ComputeOutputSha256(json);
+string jsonlDigest =
+    DeterministicConverter.ComputeOutputSha256(jsonl);
+
+bool outputDigestPass =
+    jsonDigest.Length == 64 &&
+    string.Equals(jsonDigest, jsonDigestAgain, StringComparison.Ordinal) &&
+    !string.Equals(jsonDigest, jsonlDigest, StringComparison.Ordinal);
+
 bool arabicPass =
     DirectionDetector.ContainsArabic(source);
 
@@ -69,6 +81,7 @@ bool pass =
     segmentShapePass &&
     jsonPass &&
     jsonlPass &&
+    outputDigestPass &&
     arabicPass &&
     arabicExtendedPass &&
     nullAndEmptyPass;
@@ -79,6 +92,10 @@ Console.WriteLine(
     $"JSON_PASS={jsonPass}");
 Console.WriteLine(
     $"JSONL_PASS={jsonlPass}");
+Console.WriteLine(
+    $"OUTPUT_DIGEST_PASS={outputDigestPass}");
+Console.WriteLine(
+    $"OUTPUT_SHA256={jsonDigest}");
 Console.WriteLine(
     $"ARABIC_DIRECTION_PASS={arabicPass}");
 Console.WriteLine(

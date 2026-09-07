@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -62,6 +63,13 @@ public static class DeterministicConverter
                     format,
                     "Unsupported output format.")
         };
+    }
+
+    public static string ComputeOutputSha256(string output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        byte[] bytes = Encoding.UTF8.GetBytes(output);
+        return System.Convert.ToHexString(SHA256.HashData(bytes));
     }
 
     public static IReadOnlyList<Segment> Split(string? source)
