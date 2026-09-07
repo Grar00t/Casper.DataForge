@@ -36,10 +36,9 @@
     </PackageReference>
   </ItemGroup>
 
-  <Target Name="ValidateBundledCasper" AfterTargets="Build">
+  <Target Name="ValidateBundledCasper" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <PropertyGroup>
-      <CasperBinary Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine\bin\casper.exe</CasperBinary>
-      <CasperBinary Condition="!$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine\bin\casper</CasperBinary>
+      <CasperBinary>$(OutputPath)Engine\bin\casper.exe</CasperBinary>
     </PropertyGroup>
     <Error Condition="!Exists('$(CasperBinary)')" Text="Bundled Casper engine executable is missing: $(CasperBinary)" />
   </Target>
