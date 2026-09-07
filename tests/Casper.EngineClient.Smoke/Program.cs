@@ -1,91 +1,206 @@
 using System;
+using System.IO;
+using System.Text;
 using Casper.DataForge.CrossPlatform.Engine;
 
 string encodedUrl =
     "//duckduckgo.com/l/?uddg=https%3A%2F%2Fn8n.io%2F&amp;amp;rut=abc";
 
-string normalizedUrl = SourceTextNormalizer.NormalizeUrl(encodedUrl);
+string normalizedUrl =
+    SourceTextNormalizer.NormalizeUrl(encodedUrl);
+
 string expectedUrl =
     "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fn8n.io%2F&rut=abc";
 
-bool urlNormalizationPass = string.Equals(
-    normalizedUrl,
-    expectedUrl,
-    StringComparison.Ordinal);
+bool urlNormalizationPass =
+    string.Equals(
+        normalizedUrl,
+        expectedUrl,
+        StringComparison.Ordinal);
 
 Console.WriteLine($"NormalizedUrl={normalizedUrl}");
-Console.WriteLine($"ExpectedUrl={expectedUrl}");
 Console.WriteLine($"URL_NORMALIZATION_PASS={urlNormalizationPass}");
 
 if (!urlNormalizationPass)
 {
-    Environment.ExitCode = 5;
+    Environment.ExitCode = 1;
     return;
 }
 
-var client = new CasperEngineClient();
-Console.WriteLine($"EnginePath={client.ExecutablePath}");
-Console.WriteLine($"EngineAvailable={client.IsAvailable}");
+const string payload = "casper-dataforge-smoke";
+const string expectedSha256 =
+    "F35A54438C4756A66B467114F051350A7EC1184F46BCDB7ADCF3C31ED79BB5DF";
 
-bool enginePackagingPass;
-if (OperatingSystem.IsWindows())
-{
-    enginePackagingPass =
-        client.IsAvailable &&
-        client.ComputeSha256().Length == 64;
-}
-else
-{
-    enginePackagingPass = !client.IsAvailable;
-}
+string tempDirectory =
+    Path.Combine(
+        Path.GetTempPath(),
+        "Casper.DataForge.Smoke",
+        Guid.NewGuid().ToString("N"));
 
-Console.WriteLine($"ENGINE_PACKAGING_PASS={enginePackagingPass}");
-if (!enginePackagingPass)
-{
-    Environment.ExitCode = 2;
-    return;
-}
-
-bool liveQuery = args.Any(static value =>
-    string.Equals(value, "--live-query", StringComparison.Ordinal));
-
-if (!liveQuery)
-{
-    Console.WriteLine("CLIENT_SMOKE_PASS=True");
-    Environment.ExitCode = 0;
-    return;
-}
-
-if (!client.IsAvailable)
-{
-    Console.WriteLine("CLIENT_SMOKE_PASS=False");
-    Console.WriteLine("Live query requested but no native Casper engine is bundled for this platform.");
-    Environment.ExitCode = 2;
-    return;
-}
+Directory.CreateDirectory(tempDirectory);
+string fixtureExecutablePath = Path.Combine(tempDirectory, "engine.bin");
 
 try
 {
-    CasperResponse result = await client.QueryAsync("who is n8n");
+    File.WriteAllText(
+        fixtureExecutablePath,
+        payload,
+        new UTF8Encoding(false));
 
-    Console.WriteLine($"ExitCode={result.ExitCode}");
-    Console.WriteLine($"Query={result.Query}");
-    Console.WriteLine($"Confidence={result.Confidence}");
-    Console.WriteLine($"Sources={result.SourceCount}");
-    Console.WriteLine($"Proof={result.Proof}");
-    Console.WriteLine($"Error={result.Error}");
+    var configuredClient =
+        new CasperEngineClient(
+            TimeSpan.FromSeconds(1),
+            fixtureExecutablePath,
+            expectedSha256);
 
-    bool clientPass =
-        result.ExitCode == 0 &&
-        string.Equals(result.Query, "who is n8n", StringComparison.Ordinal) &&
-        result.SourceCount >= 0;
+    bool configuredPathPass =
+        configuredClient.UsesConfiguredExecutable &&
+        configuredClient.IsAvailable &&
+        string.Equals(
+            configuredClient.ExecutablePath,
+            Path.GetFullPath(fixtureExecutablePath),
+            StringComparison.Ordinal) &&
+        string.Equals(
+            configuredClient.ComputeSha256(),
+            expectedSha256,
+            StringComparison.Ordinal) &&
+        configuredClient.VerifySha256(expectedSha256);
 
-    Console.WriteLine($"CLIENT_SMOKE_PASS={clientPass}");
-    Environment.ExitCode = clientPass ? 0 : 3;
+    Console.WriteLine($"CONFIGURED_ENGINE_PASS={configuredPathPass}");
+
+    if (!configuredPathPass)
+    {
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    string? previousEnginePath =
+        Environment.GetEnvironmentVariable(
+            CasperEngineClient.EnginePathEnvironmentVariable);
+
+    try
+    {
+        Environment.SetEnvironmentVariable(
+            CasperEngineClient.EnginePathEnvironmentVariable,
+            fixtureExecutablePath);
+
+        var environmentClient =
+            new CasperEngineClient(
+                TimeSpan.FromSeconds(1),
+                expectedSha256: expectedSha256);
+
+        bool environmentPathPass =
+            environmentClient.UsesConfiguredExecutable &&
+            string.Equals(
+                environmentClient.ExecutablePath,
+                Path.GetFullPath(fixtureExecutablePath),
+                StringComparison.Ordinal);
+
+        Console.WriteLine($"ENVIRONMENT_ENGINE_PASS={environmentPathPass}");
+
+        if (!environmentPathPass)
+        {
+            Environment.ExitCode = 3;
+            return;
+        }
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            CasperEngineClient.EnginePathEnvironmentVariable,
+            previousEnginePath);
+    }
+
+    const string query = "who is n8n";
+    var response = new CasperResponse
+    {
+        Query = query,
+        Answer = "n8n",
+        Confidence = 0.9,
+        ElapsedMilliseconds = 1,
+        Proof = new string('A', 64),
+        SourceCount = 1,
+        Sources =
+        [
+            new CasperSource
+            {
+                Number = 1,
+                Score = 0.8,
+                Sha256 = new string('B', 64),
+                Title = "n8n",
+                Url = "https://n8n.io/"
+            }
+        ],
+        ExitCode = 0
+    };
+
+    bool responseValidationPass = true;
+    try
+    {
+        CasperEngineClient.ValidateResponse(query, response);
+    }
+    catch
+    {
+        responseValidationPass = false;
+    }
+
+    Console.WriteLine($"RESPONSE_VALIDATION_PASS={responseValidationPass}");
+
+    if (!responseValidationPass)
+    {
+        Environment.ExitCode = 4;
+        return;
+    }
+
+    bool mismatchRejected = false;
+    try
+    {
+        CasperEngineClient.ValidateResponse(
+            "different query",
+            response);
+    }
+    catch (InvalidDataException)
+    {
+        mismatchRejected = true;
+    }
+
+    Console.WriteLine($"MISMATCH_REJECTED_PASS={mismatchRejected}");
+
+    if (!mismatchRejected)
+    {
+        Environment.ExitCode = 5;
+        return;
+    }
+
+    bool invalidHashRejected = false;
+    try
+    {
+        _ = new CasperEngineClient(
+            expectedSha256: "not-a-sha256");
+    }
+    catch (ArgumentException)
+    {
+        invalidHashRejected = true;
+    }
+
+    Console.WriteLine($"INVALID_HASH_REJECTED_PASS={invalidHashRejected}");
+
+    bool pass =
+        configuredPathPass &&
+        responseValidationPass &&
+        mismatchRejected &&
+        invalidHashRejected;
+
+    Console.WriteLine($"CLIENT_SMOKE_PASS={pass}");
+    Environment.ExitCode = pass ? 0 : 6;
 }
-catch (Exception exception)
+finally
 {
-    Console.WriteLine("CLIENT_SMOKE_PASS=False");
-    Console.WriteLine(exception);
-    Environment.ExitCode = 4;
+    try
+    {
+        Directory.Delete(tempDirectory, recursive: true);
+    }
+    catch
+    {
+    }
 }

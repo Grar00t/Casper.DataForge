@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
 using Casper.DataForge.CrossPlatform.Engine;
+using Microsoft.Data.Sqlite;
 
 namespace Casper.DataForge.CrossPlatform.Data;
 
@@ -15,14 +15,26 @@ public sealed class LocalDatabase : IDisposable
     private readonly object _gate = new();
     private bool _disposed;
 
-    public LocalDatabase()
+    public LocalDatabase(string? databasePath = null)
     {
-        string root = Path.Combine(
+        string defaultRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Casper.DataForge");
 
-        DatabasePath = Path.Combine(root, "casper-dataforge.db");
-        _connection = new SqliteConnection($"Data Source={DatabasePath};Cache=Shared");
+        DatabasePath = string.IsNullOrWhiteSpace(databasePath)
+            ? Path.Combine(defaultRoot, "casper-dataforge.db")
+            : Path.GetFullPath(databasePath);
+
+        string root = Path.GetDirectoryName(DatabasePath) ?? defaultRoot;
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = DatabasePath,
+            Cache = SqliteCacheMode.Shared,
+            Mode = SqliteOpenMode.ReadWriteCreate
+        };
+
+        _connection = new SqliteConnection(connectionString.ToString());
 
         try
         {
@@ -88,7 +100,9 @@ public sealed class LocalDatabase : IDisposable
     public void SeedKnowledgeBase(KnowledgeBaseCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        catalog.Validate();
         EnsureNotDisposed();
+
         if (!IsReady)
             throw new InvalidOperationException($"Database is not ready: {Error ?? "unknown error"}");
 
@@ -96,6 +110,9 @@ public sealed class LocalDatabase : IDisposable
         {
             using var transaction = _connection.BeginTransaction();
             string updatedUtc = DateTimeOffset.UtcNow.ToString("O");
+
+            Execute(transaction, "DELETE FROM knowledge_edges;");
+            Execute(transaction, "DELETE FROM knowledge_nodes;");
 
             foreach (KnowledgeNodeSeed node in catalog.Nodes)
             {
@@ -105,14 +122,7 @@ public sealed class LocalDatabase : IDisposable
                     INSERT INTO knowledge_nodes
                         (id, name_en, name_ar, domain, summary_en, summary_ar, updated_utc)
                     VALUES
-                        ($id, $name_en, $name_ar, $domain, $summary_en, $summary_ar, $updated)
-                    ON CONFLICT(id) DO UPDATE SET
-                        name_en = excluded.name_en,
-                        name_ar = excluded.name_ar,
-                        domain = excluded.domain,
-                        summary_en = excluded.summary_en,
-                        summary_ar = excluded.summary_ar,
-                        updated_utc = excluded.updated_utc;
+                        ($id, $name_en, $name_ar, $domain, $summary_en, $summary_ar, $updated);
                     """,
                     ("$id", node.Id),
                     ("$name_en", node.NameEn),
@@ -128,7 +138,7 @@ public sealed class LocalDatabase : IDisposable
                 Execute(
                     transaction,
                     """
-                    INSERT OR IGNORE INTO knowledge_edges (from_id, to_id, relation)
+                    INSERT INTO knowledge_edges (from_id, to_id, relation)
                     VALUES ($from, $to, $relation);
                     """,
                     ("$from", edge.From),
@@ -164,12 +174,9 @@ public sealed class LocalDatabase : IDisposable
 
         if (!IsReady)
             throw new InvalidOperationException($"Database is not ready: {Error ?? "unknown error"}");
-        if (response.ExitCode != 0)
-            throw new ArgumentException("Cannot persist a failed engine response.", nameof(response));
-        if (response.SourceCount < 0)
-            throw new ArgumentException("Response source count cannot be negative.", nameof(response));
-        if (response.Sources is null || response.SourceCount != response.Sources.Count)
-            throw new ArgumentException("Response source count does not match the source collection.", nameof(response));
+
+        CasperEngineClient.ValidateResponse(query, response);
+        graph.Validate();
 
         lock (_gate)
         {
@@ -261,6 +268,7 @@ public sealed class LocalDatabase : IDisposable
         {
             if (_disposed)
                 return;
+
             _disposed = true;
             _connection.Dispose();
         }
@@ -289,14 +297,17 @@ public sealed class LocalDatabase : IDisposable
         int currentVersion = Convert.ToInt32(command.ExecuteScalar());
 
         if (currentVersion > SchemaVersion)
-            throw new InvalidOperationException($"Database schema version {currentVersion} is newer than supported version {SchemaVersion}.");
+            throw new InvalidOperationException(
+                $"Database schema version {currentVersion} is newer than supported version {SchemaVersion}.");
         if (currentVersion >= SchemaVersion)
             return;
 
         using var transaction = _connection.BeginTransaction();
+
         if (currentVersion < 1)
         {
-            Execute(transaction, """
+            Execute(transaction,
+                """
                 CREATE TABLE IF NOT EXISTS query_sessions (
                     id TEXT PRIMARY KEY,
                     query TEXT NOT NULL,
@@ -343,7 +354,8 @@ public sealed class LocalDatabase : IDisposable
 
         if (currentVersion < 2)
         {
-            Execute(transaction, """
+            Execute(transaction,
+                """
                 CREATE TABLE IF NOT EXISTS knowledge_nodes (
                     id TEXT PRIMARY KEY,
                     name_en TEXT NOT NULL,
@@ -387,8 +399,10 @@ public sealed class LocalDatabase : IDisposable
         using var command = transaction.Connection!.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = sql;
+
         foreach ((string name, object? value) in values)
             command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
         command.ExecuteNonQuery();
     }
 }

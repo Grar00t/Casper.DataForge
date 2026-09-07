@@ -1,26 +1,28 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Casper.DataForge.Core;
 using Casper.DataForge.CrossPlatform.Data;
 using Casper.DataForge.CrossPlatform.Engine;
-using Casper.DataForge.Core;
-using Avalonia.Media;
 
 namespace Casper.DataForge.CrossPlatform;
 
 public partial class MainWindow : Window
 {
     private const int MaxChatMessages = 100;
+
     private readonly CasperEngineClient _engine = new();
     private readonly LocalDatabase _database = new();
+
     private OutputFormat _format = OutputFormat.Json;
     private DirectionMode _directionMode = DirectionMode.Auto;
     private bool _queryRunning;
@@ -38,7 +40,10 @@ public partial class MainWindow : Window
         UpdateDatabaseStatus();
         LoadKnowledgeBase();
         Render();
-        AddChatMessage("CASPER / كاسبر", "Ready for a grounded query. / جاهز لاستعلام موثق.", isUser: false);
+        AddChatMessage(
+            "CASPER / كاسبر",
+            "Ready for a Casper query. / جاهز لاستعلام كاسبر.",
+            isUser: false);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -56,6 +61,7 @@ public partial class MainWindow : Window
     {
         if (_directionMode == DirectionMode.Auto)
             AutoDirection();
+
         Render();
     }
 
@@ -80,13 +86,13 @@ public partial class MainWindow : Window
     private void RtlDirection_Click(object? sender, RoutedEventArgs e)
     {
         _directionMode = DirectionMode.Rtl;
-        InputTextBox.FlowDirection = Avalonia.Media.FlowDirection.RightToLeft;
+        InputTextBox.FlowDirection = FlowDirection.RightToLeft;
     }
 
     private void LtrDirection_Click(object? sender, RoutedEventArgs e)
     {
         _directionMode = DirectionMode.Ltr;
-        InputTextBox.FlowDirection = Avalonia.Media.FlowDirection.LeftToRight;
+        InputTextBox.FlowDirection = FlowDirection.LeftToRight;
     }
 
     private async void Copy_Click(object? sender, RoutedEventArgs e)
@@ -112,27 +118,33 @@ public partial class MainWindow : Window
     private async void Save_Click(object? sender, RoutedEventArgs e)
     {
         string extension = _format == OutputFormat.Json ? "json" : "jsonl";
+
         try
         {
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                SuggestedFileName = $"dataforge.{extension}",
-                DefaultExtension = extension,
-                FileTypeChoices =
-                [
-                    new FilePickerFileType(_format == OutputFormat.Json ? "JSON" : "JSON Lines")
-                    {
-                        Patterns = [$"*.{extension}"]
-                    }
-                ]
-            });
+            var file = await StorageProvider.SaveFilePickerAsync(
+                new FilePickerSaveOptions
+                {
+                    SuggestedFileName = $"dataforge.{extension}",
+                    DefaultExtension = extension,
+                    FileTypeChoices =
+                    [
+                        new FilePickerFileType(
+                            _format == OutputFormat.Json
+                                ? "JSON"
+                                : "JSON Lines")
+                        {
+                            Patterns = [$"*.{extension}"]
+                        }
+                    ]
+                });
 
             if (file is null)
                 return;
 
             await using Stream stream = await file.OpenWriteAsync();
             stream.SetLength(0);
-            await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+            await using var writer =
+                new StreamWriter(stream, new UTF8Encoding(false));
             await writer.WriteAsync(OutputTextBox.Text ?? string.Empty);
             StatusText.Text = $"Saved: {file.Name}";
         }
@@ -163,54 +175,82 @@ public partial class MainWindow : Window
 
         _queryRunning = true;
         _queryCancellation?.Dispose();
+
         var cancellation = new CancellationTokenSource();
         _queryCancellation = cancellation;
+
         SendButton.IsEnabled = false;
         SendButton.Content = "Running...";
         SourcesTextBox.Text = string.Empty;
         ConfidenceText.Text = "Confidence: -";
         ProofText.Text = "Proof: -";
         StatusText.Text = "Casper is processing the query";
+
         AddChatMessage("YOU / أنت", query, isUser: true);
-        ShowGraph(new KnowledgeGraph([new GraphNode("query", query, "query")], Array.Empty<GraphEdge>()));
+
+        if (_graphWindow is not null)
+        {
+            _graphWindow.UpdateGraph(
+                new KnowledgeGraph(
+                    [new GraphNode("query", query, "query")],
+                    Array.Empty<GraphEdge>()));
+        }
 
         try
         {
-            CasperResponse response = await _engine.QueryAsync(query, cancellation.Token);
-            ValidateResponseEvidence(response);
+            CasperResponse response =
+                await _engine.QueryAsync(query, cancellation.Token);
 
             _lastResponse = response;
             _lastQuery = query;
             DisplayCasperResponse(response);
 
-            KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(query, response);
+            KnowledgeGraph graph =
+                KnowledgeGraph.FromCasperResponse(query, response);
             graph.Validate();
+
             try
             {
-                _database.SaveSession(query, response, graph);
+                await _database.SaveSessionAsync(query, response, graph, cancellation.Token);
                 DatabaseStatusText.Text = "Local database ready";
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception databaseException)
             {
                 DatabaseStatusText.Text = "Database write failed";
-                StatusText.Text = $"Casper completed · storage warning: {databaseException.Message}";
+                StatusText.Text =
+                    $"Casper completed · storage warning: {databaseException.Message}";
             }
 
             _graphWindow?.UpdateGraph(graph);
         }
         catch (TimeoutException exception)
         {
-            AddChatMessage("TIMEOUT / مهلة", exception.Message, isUser: false);
+            AddChatMessage(
+                "TIMEOUT / مهلة",
+                exception.Message,
+                isUser: false);
             StatusText.Text = "Casper engine timed out";
             EngineBadgeText.Text = "TIMEOUT";
         }
         catch (OperationCanceledException)
         {
+            AddChatMessage(
+                "CANCELLED / ملغي",
+                "Query cancelled.",
+                isUser: false);
             StatusText.Text = "Casper query cancelled";
+            EngineBadgeText.Text = _engine.IsAvailable ? "READY" : "MISSING";
         }
         catch (Exception exception)
         {
-            AddChatMessage("ERROR / خطأ", exception.Message, isUser: false);
+            AddChatMessage(
+                "ERROR / خطأ",
+                exception.Message,
+                isUser: false);
             StatusText.Text = "Casper engine query failed";
             EngineBadgeText.Text = "ERROR";
         }
@@ -226,36 +266,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void ValidateResponseEvidence(CasperResponse response)
-    {
-        if (response.ExitCode != 0)
-            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}");
-        if (response.SourceCount != response.Sources.Count)
-            throw new InvalidDataException($"Source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
-        if (!string.IsNullOrWhiteSpace(response.Proof) && !IsSha256(response.Proof))
-            throw new InvalidDataException("Proof is not a canonical SHA-256 value.");
-        if (!string.IsNullOrWhiteSpace(response.ProofFile))
-        {
-            string proofPath = response.ProofFile;
-            if (!Path.IsPathRooted(proofPath))
-                proofPath = Path.Combine(AppContext.BaseDirectory, proofPath);
-            if (!File.Exists(proofPath))
-                throw new InvalidDataException($"Proof file does not exist: {response.ProofFile}");
-        }
-        if (double.IsNaN(response.Confidence) || double.IsInfinity(response.Confidence) || response.Confidence < 0.0 || response.Confidence > 1.0)
-            throw new InvalidDataException("Confidence is outside [0,1].");
-    }
-
-    private static bool IsSha256(string value)
-    {
-        if (value.Length != 64)
-            return false;
-        foreach (char c in value)
-            if (!Uri.IsHexDigit(c))
-                return false;
-        return true;
-    }
-
     private void Graph_Click(object? sender, RoutedEventArgs e)
     {
         if (_lastResponse is null)
@@ -264,7 +274,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        KnowledgeGraph graph = KnowledgeGraph.FromCasperResponse(_lastQuery, _lastResponse);
+        KnowledgeGraph graph =
+            KnowledgeGraph.FromCasperResponse(_lastQuery, _lastResponse);
         graph.Validate();
         ShowGraph(graph);
     }
@@ -283,6 +294,7 @@ public partial class MainWindow : Window
     private void ShowGraph(KnowledgeGraph graph)
     {
         graph.Validate();
+
         if (_graphWindow is null)
         {
             _graphWindow = new GraphWindow(graph);
@@ -310,6 +322,7 @@ public partial class MainWindow : Window
         try
         {
             _historyWindow.Load(_database.GetRecentSessions());
+
             if (_historyWindow.IsVisible)
                 _historyWindow.Activate();
             else
@@ -327,12 +340,32 @@ public partial class MainWindow : Window
             ? response.Error ?? "No answer returned."
             : response.Answer;
 
-        AddChatMessage("CASPER / كاسبر", WebUtility.HtmlDecode(answer), isUser: false);
-        ConfidenceText.Text = $"Confidence: {response.Confidence:0.000} | {response.ElapsedMilliseconds} ms";
-        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof) ? "Proof: -" : $"Proof: {ShortHash(response.Proof)}";
+        AddChatMessage(
+            "CASPER / كاسبر",
+            WebUtility.HtmlDecode(answer),
+            isUser: false);
+
+        ConfidenceText.Text =
+            $"Confidence: {response.Confidence:0.000} | " +
+            $"{response.ElapsedMilliseconds} ms";
+
+        ProofText.Text = string.IsNullOrWhiteSpace(response.Proof)
+            ? "Proof: -"
+            : $"Proof: {ShortHash(response.Proof)}";
+
         SourcesTextBox.Text = FormatSources(response.Sources);
-        StatusText.Text = $"Casper completed | Exit {response.ExitCode} | {response.SourceCount} sources";
-        EngineBadgeText.Text = response.ExitCode == 0 ? "ONLINE" : $"EXIT {response.ExitCode}";
+
+        string outcome = response.Rejected
+            ? "REJECTED"
+            : response.Violated
+                ? "VIOLATED"
+                : "COMPLETED";
+
+        StatusText.Text =
+            $"Casper {outcome.ToLowerInvariant()} | " +
+            $"{response.SourceCount} sources";
+
+        EngineBadgeText.Text = outcome;
     }
 
     private static string FormatSources(IReadOnlyList<CasperSource> sources)
@@ -341,16 +374,39 @@ public partial class MainWindow : Window
             return "No sources returned.";
 
         var builder = new StringBuilder();
+
         for (var index = 0; index < sources.Count; index++)
         {
             CasperSource source = sources[index];
-            builder.Append('[').Append(source.Number == 0 ? index + 1 : source.Number).Append("] ")
-                .AppendLine(string.IsNullOrWhiteSpace(source.Title) ? "Untitled source" : SourceTextNormalizer.DecodeHtml(source.Title));
-            builder.Append("Score: ").AppendLine(source.Score.ToString("0.000", CultureInfo.InvariantCulture));
+
+            builder
+                .Append('[')
+                .Append(source.Number == 0 ? index + 1 : source.Number)
+                .Append("] ")
+                .AppendLine(
+                    string.IsNullOrWhiteSpace(source.Title)
+                        ? "Untitled source"
+                        : SourceTextNormalizer.DecodeHtml(source.Title));
+
+            builder
+                .Append("Score: ")
+                .AppendLine(
+                    source.Score.ToString(
+                        "0.000",
+                        CultureInfo.InvariantCulture));
+
             if (!string.IsNullOrWhiteSpace(source.Url))
-                builder.Append("URL: ").AppendLine(SourceTextNormalizer.NormalizeUrl(source.Url));
+            {
+                builder
+                    .Append("URL: ")
+                    .AppendLine(
+                        SourceTextNormalizer.NormalizeUrl(source.Url));
+            }
+
             if (!string.IsNullOrWhiteSpace(source.Snippet))
-                builder.AppendLine(SourceTextNormalizer.DecodeHtml(source.Snippet));
+                builder.AppendLine(
+                    SourceTextNormalizer.DecodeHtml(source.Snippet));
+
             builder.AppendLine();
         }
 
@@ -359,14 +415,20 @@ public partial class MainWindow : Window
 
     private void UpdateEngineStatus()
     {
+        string source = _engine.UsesConfiguredExecutable
+            ? "configured"
+            : "bundled";
+
         if (_engine.IsAvailable)
         {
-            EngineStatusText.Text = "Engine executable detected";
+            EngineStatusText.Text =
+                $"Engine executable detected · {source}";
             EngineBadgeText.Text = "READY";
         }
         else
         {
-            EngineStatusText.Text = "Engine executable not found";
+            EngineStatusText.Text =
+                $"Engine executable not found · {source}";
             EngineBadgeText.Text = "MISSING";
         }
     }
@@ -375,7 +437,8 @@ public partial class MainWindow : Window
     {
         DatabaseStatusText.Text = _database.IsReady
             ? "Local database ready"
-            : $"Local database unavailable{(_database.Error is null ? string.Empty : $": {_database.Error}")}";
+            : $"Local database unavailable" +
+              $"{(_database.Error is null ? string.Empty : $": {_database.Error}")}";
     }
 
     private void LoadKnowledgeBase()
@@ -383,71 +446,105 @@ public partial class MainWindow : Window
         try
         {
             _knowledgeBase = KnowledgeBaseCatalog.LoadDefault();
-            if (_database.IsReady)
-                _database.SeedKnowledgeBase(_knowledgeBase);
-            UpdateKnowledgeStatus();
         }
         catch (Exception exception)
         {
             _knowledgeBase = null;
-            KnowledgeStatusText.Text = $"Knowledge base unavailable: {exception.Message}";
+            KnowledgeStatusText.Text =
+                $"Knowledge base unavailable: {exception.Message}";
+            return;
         }
+
+        if (_database.IsReady)
+        {
+            try
+            {
+                _database.SeedKnowledgeBase(_knowledgeBase);
+            }
+            catch (Exception exception)
+            {
+                DatabaseStatusText.Text =
+                    $"Knowledge seed sync failed: {exception.Message}";
+            }
+        }
+
+        UpdateKnowledgeStatus();
     }
 
     private void UpdateKnowledgeStatus()
     {
-        KnowledgeStatusText.Text = _knowledgeBase is null ? "Knowledge base unavailable" : $"Knowledge base ready · {_knowledgeBase.Nodes.Count} nodes";
+        KnowledgeStatusText.Text = _knowledgeBase is null
+            ? "Knowledge base unavailable"
+            : $"Knowledge base ready · {_knowledgeBase.Nodes.Count} nodes";
     }
 
-    private void AddChatMessage(string role, string text, bool isUser)
+    private void AddChatMessage(
+        string role,
+        string text,
+        bool isUser)
     {
         while (ChatMessagesList.Items.Count >= MaxChatMessages)
             ChatMessagesList.Items.RemoveAt(0);
 
         var body = new StackPanel();
-        body.Children.Add(new TextBlock
-        {
-            Text = role,
-            Foreground = new SolidColorBrush(Color.Parse(isUser ? "#8FC7FF" : "#9FE0B5")),
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 0, 0, 5)
-        });
-        body.Children.Add(new TextBlock
-        {
-            Text = text,
-            Foreground = new SolidColorBrush(Color.Parse("#E8EAF0")),
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 13
-        });
 
-        ChatMessagesList.Items.Add(new Border
-        {
-            Background = new SolidColorBrush(Color.Parse(isUser ? "#172A40" : "#172A20")),
-            BorderBrush = new SolidColorBrush(Color.Parse(isUser ? "#2F5D83" : "#2F6B48")),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(10),
-            Margin = new Thickness(0, 0, 0, 8),
-            Child = body
-        });
+        body.Children.Add(
+            new TextBlock
+            {
+                Text = role,
+                Foreground = new SolidColorBrush(
+                    Color.Parse(isUser ? "#8FC7FF" : "#9FE0B5")),
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                Margin = new Thickness(0, 0, 0, 5)
+            });
+
+        body.Children.Add(
+            new TextBlock
+            {
+                Text = text,
+                Foreground = new SolidColorBrush(
+                    Color.Parse("#E8EAF0")),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 13
+            });
+
+        ChatMessagesList.Items.Add(
+            new Border
+            {
+                Background = new SolidColorBrush(
+                    Color.Parse(isUser ? "#172A40" : "#172A20")),
+                BorderBrush = new SolidColorBrush(
+                    Color.Parse(isUser ? "#2F5D83" : "#2F6B48")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10),
+                Margin = new Thickness(0, 0, 0, 8),
+                Child = body
+            });
     }
 
     private void AutoDirection()
     {
-        InputTextBox.FlowDirection = DirectionDetector.ContainsArabic(InputTextBox.Text ?? string.Empty)
-            ? Avalonia.Media.FlowDirection.RightToLeft
-            : Avalonia.Media.FlowDirection.LeftToRight;
+        InputTextBox.FlowDirection =
+            DirectionDetector.ContainsArabic(InputTextBox.Text ?? string.Empty)
+                ? FlowDirection.RightToLeft
+                : FlowDirection.LeftToRight;
     }
 
     private void Render()
     {
         string source = InputTextBox.Text ?? string.Empty;
-        OutputTextBox.Text = DeterministicConverter.Convert(source, _format);
-        StatusText.Text = $"{_format.ToString().ToUpperInvariant()} | {source.Length} chars";
+        OutputTextBox.Text =
+            DeterministicConverter.Convert(source, _format);
+        StatusText.Text =
+            $"{_format.ToString().ToUpperInvariant()} | {source.Length} chars";
     }
 
-    private static string ShortHash(string value) => value.Length <= 12 ? value : value[..12];
+    private static string ShortHash(string value) =>
+        value.Length <= 12
+            ? value
+            : value[..12];
 
     private enum DirectionMode
     {

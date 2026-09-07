@@ -1,80 +1,55 @@
-<p align="center">
-  <img src="src/Casper.DataForge.CrossPlatform/Assets/Casper.DataForge.png" width="128" alt="Casper.DataForge logo">
-</p>
+# Casper.DataForge
 
-<h1 align="center">Casper.DataForge</h1>
+Deterministic local text structuring for JSON and JSONL, with an optional Casper native-engine query path.
 
-<p align="center">Deterministic local text structuring for JSON and JSONL.</p>
+## Scope
 
-<p align="center">
-  <a href="https://github.com/Grar00t/Casper.DataForge/releases/download/v1.1.2/Casper.DataForge-v1.1.2-win-x64.zip"><img src="https://img.shields.io/badge/Download-Windows_x64_ZIP-2563EB?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Download Windows x64 ZIP"></a>
-  <a href="https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.2"><img src="https://img.shields.io/badge/Release-v1.1.2-238636?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="Release v1.1.2"></a>
-</p>
+The Forge converter:
 
-## Overview
+- preserves the original input
+- segments text, fenced code, and LaTeX markers
+- emits deterministic JSON or JSONL
+- tracks source offsets and lengths
+- runs locally without a network dependency
+- does not generate, summarize, rewrite, or complete source text
 
-Casper.DataForge is a desktop application that converts mixed Arabic and English text into structured JSON or JSONL. It preserves the original input and does not generate, summarize, rewrite, complete, or reinterpret source content.
+The Casper query path is separate. It launches a native Casper executable through a JSON stdout protocol. Whether a query is offline depends on the Casper engine build and its retrieval configuration.
 
-The Forge conversion path is deterministic and local. The optional Casper query path is separate: it runs the bundled Casper engine and may use its configured web-retrieval backend. A Casper query must not be described as offline unless the engine is configured and verified for offline use.
+## Repository layout
 
-## Why This Exists
-
-Some text-processing tasks require repeatable transformation rather than probabilistic generation. Casper.DataForge provides a narrow, inspectable workflow:
-
-- identical input produces identical structured output
-- conversion runs locally
-- source text remains preserved
-- segment positions remain inspectable
-- output can be verified without an external service
-- no cloud account or API key is required by the Forge converter
-
-The goal is not to replace generative systems. The goal is to use deterministic software where deterministic transformation is sufficient.
-
-## Download
-
-### Windows x64
-
-[Download Casper.DataForge-v1.1.2-win-x64.zip](https://github.com/Grar00t/Casper.DataForge/releases/download/v1.1.2/Casper.DataForge-v1.1.2-win-x64.zip)
-
-The package is self-contained and does not require a separate .NET installation. Keep the included `Engine` directory beside the application executable.
-
-| Property | Value |
-|---|---|
-| Released version | `1.1.2` |
-| Current project version | `1.2.0` (unreleased) |
-| Platform | Windows x64 |
-| Distribution | Self-contained multi-file ZIP |
-| File | `Casper.DataForge-v1.1.2-win-x64.zip` |
-| Size | `41,896,701 bytes` |
-| SHA-256 | `58FECA10F98180B3ECC89E4920D79B80D8751F5A38E1299D79F55E99324CBA32` |
-
-Verify the downloaded archive:
-
-```powershell
-Get-FileHash .\Casper.DataForge-v1.1.2-win-x64.zip -Algorithm SHA256
+```text
+Casper.DataForge/
+├── src/Casper.DataForge.Core/
+│   └── DeterministicConverter.cs
+├── src/Casper.DataForge.CrossPlatform/
+│   ├── Assets/
+│   ├── Data/
+│   │   └── LocalDatabase.cs
+│   ├── Engine/
+│   │   ├── CasperEngineClient.cs
+│   │   ├── SourceTextNormalizer.cs
+│   │   └── bin/
+│   ├── GraphWindow.axaml
+│   ├── HistoryWindow.axaml
+│   ├── KnowledgeBase.cs
+│   ├── KnowledgeGraph.cs
+│   └── MainWindow.axaml
+├── tests/
+│   ├── Casper.DataForge.Core.Smoke/
+│   ├── Casper.EngineClient.Smoke/
+│   └── Casper.Persistence.Smoke/
+├── .github/workflows/ci.yml
+├── Casper.DataForge.csproj
+└── README.MD
 ```
 
-## Features
+`src/Casper.DataForge.CrossPlatform` is the primary Avalonia application.
 
-- Deterministic JSON and JSONL serialization
-- Arabic and English text support
-- Automatic and manual RTL/LTR controls
-- Plain-text, fenced-code, and display-LaTeX segmentation
-- Original-source preservation
-- Character offset and length tracking
-- UTF-8 export without BOM
-- Clipboard copy
-- Local processing with `System.Text.Json`
-- Local SQLite history for query sessions, sources, and evidence graphs
-- Animated 3D-projection evidence and knowledge graphs
-- Modern bilingual Chat surface with bounded message history
-- Bilingual knowledge-base seed with a versioned JSON Schema
-- Dark dual-pane Avalonia interface
-- No required network connection for Forge conversion
+The repository-root WPF project is the legacy Windows implementation. It remains build-checked on Windows but is not the primary application.
 
-The graph view uses an animated 3D projection on an Avalonia Canvas. It is intentionally dependency-light rather than a full GPU scene engine; node depth, perspective, and rotation are deterministic and UI-safe.
+## Deterministic output
 
-## Output Model
+JSON:
 
 ```json
 {
@@ -91,131 +66,170 @@ The graph view uses an animated 3D projection on an Avalonia Canvas. It is inten
 }
 ```
 
-Supported segment types: `text`, `code`, and `latex`. JSONL mode emits one compact JSON object per segment.
+JSONL emits one compact segment object per line.
 
-## Behavioral Guarantees
+For a fixed application version, the converter does not add timestamps, random identifiers, generated text, or external data.
 
-For a fixed application version:
+## Casper engine integration
 
-1. Source text is not rewritten.
-2. Segment order follows source order.
-3. `Start` and `Length` refer to the original .NET string.
-4. No timestamps or random identifiers are inserted.
-5. Raw operators such as `<`, `>`, `&&`, and `*` remain preserved.
-6. Serialization is performed locally.
-7. Identical input produces identical structured output.
+The repository currently includes a Windows `casper.exe` plus a SHA-256 manifest. Linux and macOS native Casper binaries are not included.
 
-## Architecture
+Engine resolution order:
+
+1. explicit path passed to `CasperEngineClient`
+2. `CASPER_DATAFORGE_ENGINE`
+3. runtime-specific bundled path such as `Engine/bin/win-x64/casper.exe`
+4. legacy bundled path such as `Engine/bin/casper.exe`
+
+Optional external-engine integrity pin:
 
 ```text
-Casper.DataForge/
-├── src/Casper.DataForge.Core/
-│   ├── DeterministicConverter.cs
-│   └── Casper.DataForge.Core.csproj
-├── src/Casper.DataForge.CrossPlatform/
-│   ├── Assets/
-│   ├── Data/
-│   ├── Engine/
-│   ├── App.axaml
-│   ├── GraphWindow.axaml
-│   ├── HistoryWindow.axaml
-│   ├── KnowledgeBase.cs
-│   ├── KnowledgeGraph.cs
-│   ├── MainWindow.axaml
-│   └── Casper.DataForge.CrossPlatform.csproj
-├── tests/
-│   ├── Casper.DataForge.Core.Smoke/
-│   └── Casper.EngineClient.Smoke/
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── LICENSE
-└── README.MD
+CASPER_DATAFORGE_ENGINE_SHA256=<64-hex-sha256>
 ```
 
-- Repository root: original Windows WPF implementation
-- `src/Casper.DataForge.CrossPlatform`: current Avalonia implementation
-- `src/Casper.DataForge.Core`: shared deterministic segmentation, serialization, and direction detection
-- `Data/LocalDatabase.cs`: versioned SQLite schema and local query persistence
-- `KnowledgeGraph.cs`: evidence graph model
-- `GraphWindow.axaml`: graph visualization
-- `HistoryWindow.axaml`: local query history
-- `Assets/KnowledgeBase/knowledge.seed.json`: curated bilingual technology taxonomy
-- `Assets/KnowledgeBase/knowledge.schema.json`: JSON Schema contract for seed data
-- `Assets/Casper.DataForge.png`: application identity asset
+Bundled engines use a `CASPER-EXE-MANIFEST.txt` located beside the executable. If the manifest exists and is malformed or does not match the executable file name or digest, the query is rejected.
+
+The engine client also validates:
+
+- process exit code
+- JSON parsing
+- source count
+- effective source-number uniqueness, including implicit numbering
+- finite source scores
+- confidence range
+- elapsed time
+- echoed query identity
+- proof SHA-256 format
+- source SHA-256 format
+- proof-file existence
+
+Relative `proof_file` values are resolved against the native engine working directory.
+
+## Local persistence
+
+Query sessions are stored in SQLite under the platform local-application-data directory by default.
+
+`LocalDatabase` also accepts an explicit database path, which is used by tests and can be used by host applications that need a controlled storage location.
+
+Stored data includes:
+
+- query session metadata
+- confidence and elapsed time
+- proof digest
+- source records
+- evidence graph nodes and edges
+- knowledge-base nodes and edges
+
+Knowledge-base seeding is reconciled transactionally to the current bundled catalog. Removed seed nodes or edges are not left behind as stale rows.
+
+## Evidence graph
+
+Casper source results are converted into a query-to-source graph.
+
+Duplicate source identities are collapsed. When duplicate sources report different scores, the graph keeps one source node and the highest score for the query-to-source edge.
+
+Graph validation rejects:
+
+- null node or edge collections
+- duplicate node IDs
+- blank node labels or kinds
+- edges referencing missing nodes
+- blank edge labels
+- duplicate edges
+
+The graph window visualizes the graph. It does not claim persistence status; persistence is reported separately by the database status.
 
 ## Build
 
-Requirements:
-
-- .NET SDK `8.0.423`
-- Windows, Linux, or macOS for development
-
-```powershell
-dotnet build .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj -c Release
-```
-
-Expected result:
+Required SDK:
 
 ```text
-Build succeeded.
-0 Warning(s)
-0 Error(s)
+8.0.423
 ```
 
-## Publish a Windows Self-Contained Package
+Build the primary application:
+
+```bash
+dotnet build src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj -c Release
+```
+
+Linux and macOS builds no longer fail merely because a platform-specific Casper native executable is absent. The Forge UI remains buildable and usable; the Casper query feature reports the engine as missing until a compatible executable is configured.
+
+On Windows, bundled-engine presence is validated by default.
+
+To force bundled-engine validation on any build:
+
+```bash
+dotnet build src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj \
+  -c Release \
+  -p:ValidateBundledCasper=true
+```
+
+## Smoke validation
+
+```bash
+dotnet run --project tests/Casper.DataForge.Core.Smoke/Casper.DataForge.Core.Smoke.csproj -c Release
+dotnet run --project tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.csproj -c Release
+dotnet run --project tests/Casper.Persistence.Smoke/Casper.Persistence.Smoke.csproj -c Release
+```
+
+The engine-client smoke test does not depend on the bundled Casper executable. It verifies path configuration, SHA-256 pinning, URL normalization, and response validation.
+
+The persistence smoke test verifies SQLite initialization with a path containing a semicolon, knowledge-base reconciliation, duplicate-source graph collapse, and session persistence.
+
+## Continuous integration
+
+GitHub Actions runs on Ubuntu and Windows and checks:
+
+- Avalonia restore and Release build
+- deterministic converter smoke validation
+- engine-client smoke validation
+- persistence smoke validation
+- bundled Windows Casper SHA-256
+- legacy WPF restore and build on Windows
+
+## Windows publish
 
 ```powershell
 dotnet publish .\src\Casper.DataForge.CrossPlatform\Casper.DataForge.CrossPlatform.csproj `
   -c Release `
   -r win-x64 `
   --self-contained true `
+  -p:ValidateBundledCasper=true `
   -p:DebugType=None `
   -p:DebugSymbols=false `
   -o .\release\win-x64
 ```
 
-The output is intentionally multi-file: the Casper native engine is launched from `Engine/bin/casper.exe` and must remain beside the application. The application may extract bundled native Avalonia and Skia components to a temporary location while running.
+The native Casper executable must remain in the published `Engine/bin` directory.
 
-## Project Status
+## Current limitations
 
-| Area | Status |
-|---|---|
-| Windows x64 self-contained multi-file package | Available |
-| Deterministic JSON and JSONL output | Verified |
-| Arabic and English input | Verified |
-| RTL/LTR controls | Verified |
-| Code and LaTeX segmentation | Verified |
-| UTF-8 export | Verified |
-| Local SQLite schema v2 | Verified |
-| Knowledge-base seed validation | Verified |
-| 3D-projection graph UI | Implemented |
-| Linux release package | Planned |
-| macOS x64 and ARM64 packages | Planned |
-| Automated release workflow | Planned |
-| Code signing | Not implemented |
+- bundled Casper native executable: Windows only
+- Linux Casper package: not included
+- macOS Casper package: not included
+- code signing: not implemented
+- automated release publishing: not implemented
+- Forge conversion is offline; Casper query networking depends on the configured engine
 
-## Security and Privacy
+## Release
 
-- Forge input is processed locally.
-- Casper queries may access the engine's configured retrieval backend.
-- No telemetry is intentionally implemented.
-- No network access is required for conversion.
-- No credentials or API keys are required.
-- Saved output remains under the user's control.
+The latest documented packaged release remains `v1.1.2`. The source tree is on the unreleased `1.2.0` line.
 
-The current Windows executable is not code-signed. Verify the SHA-256 digest before execution.
+## Security and privacy
 
-## Contributing
+- Forge conversion does not require network access.
+- No telemetry is intentionally implemented in this repository.
+- Casper queries may use network access through the configured native engine.
+- The bundled Windows engine is hash-checked against its manifest before query execution.
+- External engine binaries can be pinned with `CASPER_DATAFORGE_ENGINE_SHA256`.
+- The current Windows executable is not code-signed.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting an issue or pull request.
+## License
 
-## Changelog
+Casper.DataForge is source-available for noncommercial use under the PolyForm Noncommercial License 1.0.0.
 
-Release history is maintained in [CHANGELOG.md](CHANGELOG.md).
-
-## Licensing
-
-Casper.DataForge is source-available for noncommercial use under the PolyForm Noncommercial License 1.0.0. Commercial, corporate, production, internal-business, hosted-service, resale, integration, AI-training, model-training, or revenue-generating use requires prior written permission and a separate commercial license from:
+Commercial, corporate, production, internal-business, hosted-service, resale, integration, AI-training, model-training, or revenue-generating use requires prior written permission and a separate commercial license from:
 
 ```text
 Gratech
@@ -223,8 +237,4 @@ Commercial Registration: 7050426415
 Riyadh, Saudi Arabia
 ```
 
-See [LICENSE](LICENSE) for the complete notice.
-
-## Maintainer
-
-Maintained through [Grar00t](https://github.com/Grar00t) under the Gratech commercial licensing identity. Technical claims are intended to be supported by source code, build output, release artifacts, and reproducible verification steps.
+See `LICENSE` for the complete notice.

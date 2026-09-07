@@ -1,42 +1,79 @@
-name: ci
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.423
-      - name: Restore
-        run: dotnet restore src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj
-      - name: Build application
-        run: dotnet build src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj -c Release --no-restore
-      - name: Core smoke
-        run: dotnet run --project tests/Casper.DataForge.Core.Smoke/Casper.DataForge.Core.Smoke.csproj -c Release
-      - name: Engine client offline smoke
-        run: dotnet run --project tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.csproj -c Release
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
-  windows:
-    runs-on: windows-latest
+jobs:
+  verify:
+    name: verify-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.423
-      - name: Restore
+
+      - name: Restore Avalonia application
         run: dotnet restore src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj
-      - name: Build application
+
+      - name: Build Avalonia application
         run: dotnet build src/Casper.DataForge.CrossPlatform/Casper.DataForge.CrossPlatform.csproj -c Release --no-restore
-      - name: Core smoke
-        run: dotnet run --project tests/Casper.DataForge.Core.Smoke/Casper.DataForge.Core.Smoke.csproj -c Release
-      - name: Engine client offline smoke
-        run: dotnet run --project tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.csproj -c Release
+
+      - name: Restore core smoke
+        run: dotnet restore tests/Casper.DataForge.Core.Smoke/Casper.DataForge.Core.Smoke.csproj
+
+      - name: Run core smoke
+        run: dotnet run --project tests/Casper.DataForge.Core.Smoke/Casper.DataForge.Core.Smoke.csproj -c Release --no-restore
+
+      - name: Restore engine client smoke
+        run: dotnet restore tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.csproj
+
+      - name: Run engine client smoke
+        run: dotnet run --project tests/Casper.EngineClient.Smoke/Casper.EngineClient.Smoke.csproj -c Release --no-restore
+
+      - name: Restore persistence smoke
+        run: dotnet restore tests/Casper.Persistence.Smoke/Casper.Persistence.Smoke.csproj
+
+      - name: Run persistence smoke
+        run: dotnet run --project tests/Casper.Persistence.Smoke/Casper.Persistence.Smoke.csproj -c Release --no-restore
+
+      - name: Verify bundled Windows engine digest
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $manifest = 'src/Casper.DataForge.CrossPlatform/Engine/bin/CASPER-EXE-MANIFEST.txt'
+          $engine = 'src/Casper.DataForge.CrossPlatform/Engine/bin/casper.exe'
+          $expected = ((Get-Content $manifest | Where-Object { $_ -match '^SHA256=' }) -split '=', 2)[1].Trim()
+          $actual = (Get-FileHash $engine -Algorithm SHA256).Hash
+          if ($actual -ne $expected) {
+            throw "Bundled Casper SHA-256 mismatch. Expected=$expected Actual=$actual"
+          }
+
+      - name: Restore legacy WPF application
+        if: runner.os == 'Windows'
+        run: dotnet restore Casper.DataForge.csproj
+
+      - name: Build legacy WPF application
+        if: runner.os == 'Windows'
+        run: dotnet build Casper.DataForge.csproj -c Release --no-restore

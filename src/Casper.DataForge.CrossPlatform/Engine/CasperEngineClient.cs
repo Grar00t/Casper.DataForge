@@ -14,37 +14,54 @@ namespace Casper.DataForge.CrossPlatform.Engine;
 
 public sealed class CasperEngineClient
 {
+    public const string EnginePathEnvironmentVariable = "CASPER_DATAFORGE_ENGINE";
+    public const string EngineSha256EnvironmentVariable = "CASPER_DATAFORGE_ENGINE_SHA256";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public CasperEngineClient(TimeSpan? timeout = null)
+    private readonly string? _configuredExecutablePath;
+    private readonly string? _configuredExpectedSha256;
+
+    public CasperEngineClient(
+        TimeSpan? timeout = null,
+        string? executablePath = null,
+        string? expectedSha256 = null)
     {
         Timeout = timeout ?? TimeSpan.FromSeconds(30);
         if (Timeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be positive.");
+
+        string? configuredPath = FirstNonBlank(
+            executablePath,
+            Environment.GetEnvironmentVariable(EnginePathEnvironmentVariable));
+
+        if (configuredPath is not null)
+            _configuredExecutablePath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(configuredPath));
+
+        string? configuredHash = FirstNonBlank(
+            expectedSha256,
+            Environment.GetEnvironmentVariable(EngineSha256EnvironmentVariable));
+
+        if (configuredHash is not null)
+        {
+            configuredHash = configuredHash.Trim();
+            if (!IsSha256(configuredHash))
+                throw new ArgumentException(
+                    "Expected Casper engine SHA-256 must contain exactly 64 hexadecimal characters.",
+                    nameof(expectedSha256));
+
+            _configuredExpectedSha256 = configuredHash.ToUpperInvariant();
+        }
     }
 
     public TimeSpan Timeout { get; }
 
-    public string ExecutablePath
-    {
-        get
-        {
-            string fileName = OperatingSystem.IsWindows() ? "casper.exe" : "casper";
-            string? runtimeDirectory = GetRuntimeDirectory();
+    public bool UsesConfiguredExecutable => _configuredExecutablePath is not null;
 
-            if (runtimeDirectory is not null)
-            {
-                string platformPath = Path.Combine(AppContext.BaseDirectory, "Engine", "bin", runtimeDirectory, fileName);
-                if (File.Exists(platformPath))
-                    return platformPath;
-            }
-
-            return Path.Combine(AppContext.BaseDirectory, "Engine", "bin", fileName);
-        }
-    }
+    public string ExecutablePath => _configuredExecutablePath ?? ResolveBundledExecutablePath();
 
     public bool IsAvailable => File.Exists(ExecutablePath);
 
@@ -63,24 +80,32 @@ public sealed class CasperEngineClient
             return false;
 
         string expected = expectedSha256.Trim();
-        return expected.Length == 64 && string.Equals(ComputeSha256(), expected, StringComparison.OrdinalIgnoreCase);
+        return IsSha256(expected) &&
+               string.Equals(ComputeSha256(), expected, StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<CasperResponse> QueryAsync(string query, CancellationToken cancellationToken = default)
+    public async Task<CasperResponse> QueryAsync(
+        string query,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be empty.", nameof(query));
         if (!IsAvailable)
             throw new FileNotFoundException("Casper engine executable was not found.", ExecutablePath);
 
-        string? expectedHash = TryReadBundledSha256();
+        string executablePath = ExecutablePath;
+        string? expectedHash = _configuredExpectedSha256 ??
+                               (UsesConfiguredExecutable ? null : TryReadBundledSha256(executablePath));
+
         if (expectedHash is not null && !VerifySha256(expectedHash))
-            throw new InvalidDataException("Bundled Casper engine SHA-256 does not match its manifest.");
+            throw new InvalidDataException("Casper engine SHA-256 does not match the configured or bundled digest.");
+
+        string workingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory;
 
         using CancellationTokenSource timeoutCts = new(Timeout);
-        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        using CancellationTokenSource linkedCts =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-        string executablePath = ExecutablePath;
         ProcessStartInfo startInfo = new()
         {
             FileName = executablePath,
@@ -90,7 +115,7 @@ public sealed class CasperEngineClient
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
+            WorkingDirectory = workingDirectory
         };
         startInfo.ArgumentList.Add(query);
 
@@ -105,7 +130,8 @@ public sealed class CasperEngineClient
         {
             await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
+            when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             Terminate(process);
             await process.WaitForExitAsync().ConfigureAwait(false);
@@ -123,7 +149,8 @@ public sealed class CasperEngineClient
         int exitCode = process.ExitCode;
 
         if (exitCode != 0)
-            throw new InvalidOperationException($"Casper engine exited with code {exitCode}. Error={error.Trim()}");
+            throw new InvalidOperationException(
+                $"Casper engine exited with code {exitCode}. Error={error.Trim()}");
         if (string.IsNullOrWhiteSpace(output))
             throw new InvalidDataException($"Casper returned no JSON. Error={error.Trim()}");
 
@@ -139,34 +166,173 @@ public sealed class CasperEngineClient
 
         if (response is null)
             throw new InvalidDataException("Casper returned an empty JSON value.");
-        if (response.SourceCount < 0)
-            throw new InvalidDataException("Casper returned a negative source count.");
 
         IReadOnlyList<CasperSource> sources = response.Sources ?? Array.Empty<CasperSource>();
-        if (response.SourceCount != sources.Count)
-            throw new InvalidDataException($"Casper source count mismatch: declared {response.SourceCount}, actual {sources.Count}.");
+        response = response with
+        {
+            ExitCode = exitCode,
+            StandardError = error,
+            Sources = sources
+        };
 
-        return response with { ExitCode = exitCode, StandardError = error, Sources = sources };
+        ValidateResponse(query, response);
+        response = NormalizeAndValidateProofFile(response, workingDirectory);
+        return response;
     }
 
-    private string? TryReadBundledSha256()
+    public static void ValidateResponse(string query, CasperResponse response)
     {
-        string manifestPath = Path.Combine(AppContext.BaseDirectory, "Engine", "bin", "CASPER-EXE-MANIFEST.txt");
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be empty.", nameof(query));
+        ArgumentNullException.ThrowIfNull(response);
+
+        if (response.ExitCode != 0)
+            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}.");
+        if (response.SourceCount < 0)
+            throw new InvalidDataException("Casper returned a negative source count.");
+        if (response.Sources is null)
+            throw new InvalidDataException("Casper returned a null source collection.");
+        if (response.SourceCount != response.Sources.Count)
+            throw new InvalidDataException(
+                $"Casper source count mismatch: declared {response.SourceCount}, actual {response.Sources.Count}.");
+        if (double.IsNaN(response.Confidence) ||
+            double.IsInfinity(response.Confidence) ||
+            response.Confidence < 0.0 ||
+            response.Confidence > 1.0)
+            throw new InvalidDataException("Casper confidence is outside [0,1].");
+        if (response.ElapsedMilliseconds < 0)
+            throw new InvalidDataException("Casper returned a negative elapsed time.");
+        if (!string.IsNullOrWhiteSpace(response.Query) &&
+            !string.Equals(response.Query, query, StringComparison.Ordinal))
+            throw new InvalidDataException("Casper echoed a query that does not match the submitted query.");
+        if (!string.IsNullOrWhiteSpace(response.Proof) && !IsSha256(response.Proof))
+            throw new InvalidDataException("Casper proof is not a canonical SHA-256 value.");
+
+        var sourceNumbers = new HashSet<int>();
+        for (var index = 0; index < response.Sources.Count; index++)
+        {
+            CasperSource source = response.Sources[index];
+            if (source.Number < 0)
+                throw new InvalidDataException("Casper returned a negative source number.");
+
+            int effectiveNumber = source.Number == 0 ? index + 1 : source.Number;
+            if (!sourceNumbers.Add(effectiveNumber))
+                throw new InvalidDataException(
+                    $"Casper returned colliding source number {effectiveNumber}.");
+
+            if (double.IsNaN(source.Score) || double.IsInfinity(source.Score))
+                throw new InvalidDataException("Casper returned a non-finite source score.");
+            if (!string.IsNullOrWhiteSpace(source.Sha256) && !IsSha256(source.Sha256))
+                throw new InvalidDataException("Casper returned a source SHA-256 value with an invalid format.");
+        }
+    }
+
+    private static CasperResponse NormalizeAndValidateProofFile(
+        CasperResponse response,
+        string workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(response.ProofFile))
+            return response;
+
+        string proofPath;
+        try
+        {
+            proofPath = response.ProofFile.Trim();
+            if (!Path.IsPathRooted(proofPath))
+                proofPath = Path.GetFullPath(Path.Combine(workingDirectory, proofPath));
+            else
+                proofPath = Path.GetFullPath(proofPath);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+            NotSupportedException or
+            PathTooLongException)
+        {
+            throw new InvalidDataException("Casper returned an invalid proof file path.", exception);
+        }
+
+        if (!File.Exists(proofPath))
+            throw new InvalidDataException($"Casper proof file does not exist: {response.ProofFile}");
+
+        return response with { ProofFile = proofPath };
+    }
+
+    private string ResolveBundledExecutablePath()
+    {
+        string fileName = OperatingSystem.IsWindows() ? "casper.exe" : "casper";
+        string? runtimeDirectory = GetRuntimeDirectory();
+
+        if (runtimeDirectory is not null)
+        {
+            string platformPath =
+                Path.Combine(AppContext.BaseDirectory, "Engine", "bin", runtimeDirectory, fileName);
+            if (File.Exists(platformPath))
+                return platformPath;
+        }
+
+        return Path.Combine(AppContext.BaseDirectory, "Engine", "bin", fileName);
+    }
+
+    private static string? TryReadBundledSha256(string executablePath)
+    {
+        string? directory = Path.GetDirectoryName(executablePath);
+        if (directory is null)
+            return null;
+
+        string manifestPath = Path.Combine(directory, "CASPER-EXE-MANIFEST.txt");
         if (!File.Exists(manifestPath))
             return null;
 
+        string? fileName = null;
+        string? sha256 = null;
+
         foreach (string line in File.ReadLines(manifestPath))
         {
-            const string prefix = "SHA256=";
-            if (!line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            int separator = line.IndexOf('=');
+            if (separator <= 0)
                 continue;
 
-            string value = line[prefix.Length..].Trim();
-            if (value.Length == 64)
-                return value;
+            string key = line[..separator].Trim();
+            string value = line[(separator + 1)..].Trim();
+
+            if (key.Equals("File", StringComparison.OrdinalIgnoreCase))
+                fileName = value;
+            else if (key.Equals("SHA256", StringComparison.OrdinalIgnoreCase))
+                sha256 = value;
         }
 
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new InvalidDataException($"Casper manifest is missing File=: {manifestPath}");
+        if (!string.Equals(fileName, Path.GetFileName(executablePath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(
+                $"Casper manifest file name '{fileName}' does not match '{Path.GetFileName(executablePath)}'.");
+        if (string.IsNullOrWhiteSpace(sha256) || !IsSha256(sha256))
+            throw new InvalidDataException($"Casper manifest contains an invalid SHA256=: {manifestPath}");
+
+        return sha256.ToUpperInvariant();
+    }
+
+    private static string? FirstNonBlank(string? first, string? second)
+    {
+        if (!string.IsNullOrWhiteSpace(first))
+            return first.Trim();
+        if (!string.IsNullOrWhiteSpace(second))
+            return second.Trim();
         return null;
+    }
+
+    private static bool IsSha256(string value)
+    {
+        if (value.Length != 64)
+            return false;
+
+        foreach (char character in value)
+        {
+            if (!Uri.IsHexDigit(character))
+                return false;
+        }
+
+        return true;
     }
 
     private static string? GetRuntimeDirectory()
@@ -214,7 +380,8 @@ public sealed record CasperResponse
     [JsonPropertyName("proof")] public string? Proof { get; init; }
     [JsonPropertyName("proof_file")] public string? ProofFile { get; init; }
     [JsonPropertyName("n_sources")] public int SourceCount { get; init; }
-    [JsonPropertyName("sources")] public IReadOnlyList<CasperSource> Sources { get; init; } = Array.Empty<CasperSource>();
+    [JsonPropertyName("sources")] public IReadOnlyList<CasperSource> Sources { get; init; } =
+        Array.Empty<CasperSource>();
     [JsonIgnore] public int ExitCode { get; init; }
     [JsonIgnore] public string StandardError { get; init; } = string.Empty;
 }

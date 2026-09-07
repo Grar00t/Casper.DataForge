@@ -34,11 +34,20 @@ public sealed record KnowledgeBaseCatalog(
 
     public static KnowledgeBaseCatalog LoadDefault()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "Assets", "KnowledgeBase", "knowledge.seed.json");
+        string path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Assets",
+            "KnowledgeBase",
+            "knowledge.seed.json");
+
         if (!File.Exists(path))
             throw new FileNotFoundException("Knowledge base seed was not found.", path);
 
-        KnowledgeBaseCatalog? catalog = JsonSerializer.Deserialize<KnowledgeBaseCatalog>(File.ReadAllText(path), JsonOptions);
+        KnowledgeBaseCatalog? catalog =
+            JsonSerializer.Deserialize<KnowledgeBaseCatalog>(
+                File.ReadAllText(path),
+                JsonOptions);
+
         if (catalog is null)
             throw new InvalidDataException("Knowledge base seed is empty.");
 
@@ -48,44 +57,75 @@ public sealed record KnowledgeBaseCatalog(
 
     public KnowledgeGraph ToGraph()
     {
-        var nodes = Nodes.Select(node => new GraphNode(node.Id, $"{node.NameEn} / {node.NameAr}", "knowledge")).ToList();
-        var edges = Edges.Select(edge => new GraphEdge(edge.From, edge.To, edge.Relation)).ToList();
-        return new KnowledgeGraph(nodes, edges);
+        Validate();
+
+        var nodes = Nodes
+            .Select(node =>
+                new GraphNode(
+                    node.Id,
+                    $"{node.NameEn} / {node.NameAr}",
+                    "knowledge"))
+            .ToList();
+
+        var edges = Edges
+            .Select(edge =>
+                new GraphEdge(edge.From, edge.To, edge.Relation))
+            .ToList();
+
+        var graph = new KnowledgeGraph(nodes, edges);
+        graph.Validate();
+        return graph;
     }
 
-    private void Validate()
+    public void Validate()
     {
         if (SchemaVersion != 1)
-            throw new InvalidDataException($"Unsupported knowledge base schema version: {SchemaVersion}.");
+            throw new InvalidDataException(
+                $"Unsupported knowledge base schema version: {SchemaVersion}.");
         if (string.IsNullOrWhiteSpace(CatalogId))
             throw new InvalidDataException("Knowledge base catalog id is required.");
+        if (Nodes is null)
+            throw new InvalidDataException("Knowledge base node collection cannot be null.");
+        if (Edges is null)
+            throw new InvalidDataException("Knowledge base edge collection cannot be null.");
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (KnowledgeNodeSeed node in Nodes)
         {
+            if (node is null)
+                throw new InvalidDataException("Knowledge base contains a null node.");
+
             if (string.IsNullOrWhiteSpace(node.Id) ||
                 string.IsNullOrWhiteSpace(node.NameEn) ||
                 string.IsNullOrWhiteSpace(node.NameAr) ||
                 string.IsNullOrWhiteSpace(node.Domain) ||
                 string.IsNullOrWhiteSpace(node.SummaryEn) ||
                 string.IsNullOrWhiteSpace(node.SummaryAr))
-                throw new InvalidDataException($"Knowledge node '{node.Id}' is incomplete.");
+                throw new InvalidDataException(
+                    $"Knowledge node '{node.Id}' is incomplete.");
 
             if (!ids.Add(node.Id))
-                throw new InvalidDataException($"Duplicate knowledge node id: {node.Id}.");
+                throw new InvalidDataException(
+                    $"Duplicate knowledge node id: {node.Id}.");
         }
 
         var edgeKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (KnowledgeEdgeSeed edge in Edges)
         {
+            if (edge is null)
+                throw new InvalidDataException("Knowledge base contains a null edge.");
+
             if (!ids.Contains(edge.From) || !ids.Contains(edge.To))
-                throw new InvalidDataException($"Knowledge edge references an unknown node: {edge.From} -> {edge.To}.");
+                throw new InvalidDataException(
+                    $"Knowledge edge references an unknown node: {edge.From} -> {edge.To}.");
             if (edge.From == edge.To || string.IsNullOrWhiteSpace(edge.Relation))
-                throw new InvalidDataException("Knowledge edges must be directed and labelled.");
+                throw new InvalidDataException(
+                    "Knowledge edges must be directed and labelled.");
 
             string key = $"{edge.From}\u001F{edge.To}\u001F{edge.Relation}";
             if (!edgeKeys.Add(key))
-                throw new InvalidDataException($"Duplicate knowledge edge: {key}.");
+                throw new InvalidDataException(
+                    $"Duplicate knowledge edge: {edge.From} -> {edge.To} ({edge.Relation}).");
         }
     }
 }

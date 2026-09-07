@@ -8,6 +8,8 @@
     <Product>Casper.DataForge</Product>
     <Version>1.2.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ValidateBundledCasper Condition="'$(ValidateBundledCasper)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">true</ValidateBundledCasper>
+    <ValidateBundledCasper Condition="'$(ValidateBundledCasper)' == ''">false</ValidateBundledCasper>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,10 +38,16 @@
     </PackageReference>
   </ItemGroup>
 
-  <Target Name="ValidateBundledCasper" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+  <Target
+      Name="ValidateBundledCasper"
+      AfterTargets="Build"
+      Condition="'$(ValidateBundledCasper)' == 'true'">
     <PropertyGroup>
-      <CasperBinary>$(OutputPath)Engine\bin\casper.exe</CasperBinary>
+      <CasperBinary Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine\bin\casper.exe</CasperBinary>
+      <CasperBinary Condition="!$([MSBuild]::IsOSPlatform('Windows'))">$(OutputPath)Engine/bin/casper</CasperBinary>
     </PropertyGroup>
-    <Error Condition="!Exists('$(CasperBinary)')" Text="Bundled Casper engine executable is missing: $(CasperBinary)" />
+    <Error
+        Condition="!Exists('$(CasperBinary)')"
+        Text="Bundled Casper engine executable is missing: $(CasperBinary)" />
   </Target>
 </Project>

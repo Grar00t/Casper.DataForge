@@ -50,15 +50,24 @@ public static class DeterministicConverter
 
         return format switch
         {
-            OutputFormat.Json => JsonSerializer.Serialize(new ForgeDocument(source, segments), JsonOptions),
-            OutputFormat.Jsonl => ToJsonLines(segments),
-            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported output format.")
+            OutputFormat.Json =>
+                JsonSerializer.Serialize(
+                    new ForgeDocument(source, segments),
+                    JsonOptions),
+            OutputFormat.Jsonl =>
+                ToJsonLines(segments),
+            _ =>
+                throw new ArgumentOutOfRangeException(
+                    nameof(format),
+                    format,
+                    "Unsupported output format.")
         };
     }
 
     public static IReadOnlyList<Segment> Split(string? source)
     {
         source ??= string.Empty;
+
         var result = new List<Segment>();
         var textStart = 0;
         var position = 0;
@@ -69,57 +78,126 @@ public static class DeterministicConverter
             if (marker.Start < 0)
                 break;
 
-            Add(result, "text", source, textStart, marker.Start - textStart);
+            Add(
+                result,
+                "text",
+                source,
+                textStart,
+                marker.Start - textStart);
 
             int end = FindClosingMarker(source, marker);
-            Add(result, marker.Type, source, marker.Start, end - marker.Start);
+
+            Add(
+                result,
+                marker.Type,
+                source,
+                marker.Start,
+                end - marker.Start);
 
             position = end;
             textStart = end;
         }
 
-        Add(result, "text", source, textStart, source.Length - textStart);
+        Add(
+            result,
+            "text",
+            source,
+            textStart,
+            source.Length - textStart);
+
         return result;
     }
 
     private static string ToJsonLines(IReadOnlyList<Segment> segments)
     {
         var builder = new StringBuilder();
+
         foreach (Segment segment in segments)
         {
-            builder.Append(JsonSerializer.Serialize(segment, JsonLineOptions));
+            builder.Append(
+                JsonSerializer.Serialize(
+                    segment,
+                    JsonLineOptions));
+
             builder.Append('\n');
         }
 
-        return builder.ToString().TrimEnd('\r', '\n');
+        return builder
+            .ToString()
+            .TrimEnd('\r', '\n');
     }
 
-    private static (int Start, string Open, string Close, string Type) FindNextMarker(string source, int from)
+    private static (
+        int Start,
+        string Open,
+        string Close,
+        string Type)
+        FindNextMarker(
+            string source,
+            int from)
     {
-        var best = (-1, string.Empty, string.Empty, string.Empty);
+        var best =
+            (-1, string.Empty, string.Empty, string.Empty);
+
         foreach ((string open, string close, string type) in Markers)
         {
-            int index = source.IndexOf(open, from, StringComparison.Ordinal);
-            if (index >= 0 && (best.Item1 < 0 || index < best.Item1))
-                best = (index, open, close, type);
+            int index =
+                source.IndexOf(
+                    open,
+                    from,
+                    StringComparison.Ordinal);
+
+            if (index >= 0 &&
+                (best.Item1 < 0 || index < best.Item1))
+            {
+                best =
+                    (index, open, close, type);
+            }
         }
 
         return best;
     }
 
-    private static int FindClosingMarker(string source, (int Start, string Open, string Close, string Type) marker)
+    private static int FindClosingMarker(
+        string source,
+        (
+            int Start,
+            string Open,
+            string Close,
+            string Type)
+        marker)
     {
-        int searchFrom = marker.Start + marker.Open.Length;
-        int close = source.IndexOf(marker.Close, searchFrom, StringComparison.Ordinal);
-        return close < 0 ? source.Length : close + marker.Close.Length;
+        int searchFrom =
+            marker.Start + marker.Open.Length;
+
+        int close =
+            source.IndexOf(
+                marker.Close,
+                searchFrom,
+                StringComparison.Ordinal);
+
+        return close < 0
+            ? source.Length
+            : close + marker.Close.Length;
     }
 
-    private static void Add(List<Segment> target, string type, string source, int start, int length)
+    private static void Add(
+        List<Segment> target,
+        string type,
+        string source,
+        int start,
+        int length)
     {
         if (length <= 0)
             return;
 
-        target.Add(new Segment(target.Count, type, source.Substring(start, length), start, length));
+        target.Add(
+            new Segment(
+                target.Count,
+                type,
+                source.Substring(start, length),
+                start,
+                length));
     }
 }
 
@@ -130,14 +208,21 @@ public static class DirectionDetector
         if (string.IsNullOrEmpty(value))
             return false;
 
-        foreach (char character in value)
+        foreach (Rune rune in value.EnumerateRunes())
         {
-            if (character is >= '\u0600' and <= '\u06FF' or
-                >= '\u0750' and <= '\u077F' or
-                >= '\u08A0' and <= '\u08FF' or
-                >= '\uFB50' and <= '\uFDFF' or
-                >= '\uFE70' and <= '\uFEFF')
+            int codePoint = rune.Value;
+
+            if (codePoint is >= 0x0600 and <= 0x06FF or
+                >= 0x0750 and <= 0x077F or
+                >= 0x0870 and <= 0x089F or
+                >= 0x08A0 and <= 0x08FF or
+                >= 0xFB50 and <= 0xFDFF or
+                >= 0xFE70 and <= 0xFEFF or
+                >= 0x10E60 and <= 0x10E7F or
+                >= 0x1EE00 and <= 0x1EEFF)
+            {
                 return true;
+            }
         }
 
         return false;

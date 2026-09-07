@@ -30,6 +30,7 @@ public partial class GraphWindow : Window
     public GraphWindow(KnowledgeGraph graph)
     {
         InitializeComponent();
+        graph.Validate();
         _graph = graph;
         _animationTimer = new DispatcherTimer
         {
@@ -42,6 +43,7 @@ public partial class GraphWindow : Window
 
     public void UpdateGraph(KnowledgeGraph graph)
     {
+        graph.Validate();
         _graph = graph;
         Render();
     }
@@ -66,17 +68,15 @@ public partial class GraphWindow : Window
     {
         GraphCanvas.Children.Clear();
         SummaryText.Text =
-            $"LIVE 3D PROJECTION · {_graph.Nodes.Count} nodes · " +
-            $"{_graph.Edges.Count} links · persisted locally";
+            $"3D PROJECTION · {_graph.Nodes.Count} nodes · " +
+            $"{_graph.Edges.Count} links";
 
         var positions = new Dictionary<string, ProjectedNode>(StringComparer.Ordinal);
         GraphNode? queryNode = _graph.Nodes.FirstOrDefault(
             static node => node.Kind == "query");
 
         if (queryNode is not null)
-        {
             positions[queryNode.Id] = Project(new Point3D(0, -170, 0), 1);
-        }
 
         List<GraphNode> orbitNodes = _graph.Nodes
             .Where(static node => node.Kind != "query")
@@ -103,7 +103,10 @@ public partial class GraphWindow : Window
                 StartPoint = new Point(from.X, from.Y),
                 EndPoint = new Point(to.X, to.Y),
                 Stroke = EdgeBrush,
-                StrokeThickness = Math.Clamp(1.0 * Math.Min(from.Scale, to.Scale), 0.7, 2.2)
+                StrokeThickness = Math.Clamp(
+                    1.0 * Math.Min(from.Scale, to.Scale),
+                    0.7,
+                    2.2)
             });
 
             AddText(
@@ -156,6 +159,7 @@ public partial class GraphWindow : Window
                 : Brushes.SlateGray,
             StrokeThickness = 1.5
         };
+
         Canvas.SetLeft(ellipse, position.X - diameter / 2);
         Canvas.SetTop(ellipse, position.Y - diameter / 2);
         GraphCanvas.Children.Add(ellipse);
@@ -190,6 +194,7 @@ public partial class GraphWindow : Window
             FontSize = fontSize,
             Foreground = new SolidColorBrush(Color.Parse(color))
         };
+
         Canvas.SetLeft(block, x);
         Canvas.SetTop(block, y);
         GraphCanvas.Children.Add(block);

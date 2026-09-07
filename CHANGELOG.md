@@ -8,26 +8,41 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 
 ### Added
 
-- Shared `Casper.DataForge.Core` library used by WPF and Avalonia clients.
-- Local SQLite persistence for query sessions, sources, and evidence graphs.
-- Bilingual knowledge-base seed and JSON Schema contract for core technology domains.
-- Evidence graph and local query-history windows.
-- Bounded bilingual Chat history and animated 3D-projection graph view.
-- Core and engine/database smoke validation.
+- Configurable Casper native-engine path through `CASPER_DATAFORGE_ENGINE`.
+- Optional external engine SHA-256 pin through `CASPER_DATAFORGE_ENGINE_SHA256`.
+- Explicit database-path support for controlled and testable SQLite storage.
+- Persistence smoke validation for database initialization, knowledge reconciliation, graph deduplication, and session storage.
+- GitHub Actions CI on Ubuntu and Windows.
+- Windows CI verification of the bundled Casper executable SHA-256.
+
+### Fixed
+
+- Removed duplicate local-variable declarations that prevented `Casper.EngineClient.Smoke` from compiling.
+- Cross-platform Avalonia builds no longer fail on Linux or macOS solely because a platform-specific Casper native executable is absent.
+- Relative `proof_file` paths are resolved against the native engine working directory instead of the UI executable directory.
+- Malformed bundled engine manifests no longer silently disable digest verification.
+- Engine responses now reject mismatched query echoes, invalid confidence, negative elapsed time, malformed proof/source digests, effective source-number collisions, and non-finite source scores.
+- Duplicate source identities no longer create duplicate graph edges that can violate SQLite uniqueness constraints.
+- Knowledge-base reseeding now removes stale seed nodes and edges transactionally.
+- SQLite connection strings are built safely when database paths contain connection-string characters such as semicolons.
+- Database persistence now validates the response and graph at the storage boundary.
+- A knowledge-base database sync failure no longer discards an otherwise valid in-memory knowledge catalog.
+- The graph window no longer claims that a graph was persisted when persistence has not been established.
 
 ### Changed
 
-- Manual RTL/LTR direction is now preserved while editing; Auto mode remains automatic.
-- Casper engine path selection now supports platform and architecture-specific binaries.
-- Cancellation terminates the native Casper process safely.
-- Documentation now distinguishes deterministic offline conversion from optional web retrieval.
+- The Avalonia application is documented as the primary implementation; the repository-root WPF project is explicitly legacy.
+- Bundled native-engine validation is enabled by default on Windows and can be forced with `-p:ValidateBundledCasper=true`.
+- Graph source identity handling preserves URL path case and collapses repeated source identities while retaining the highest reported score.
+- Knowledge-base validation is public and is re-run before graph conversion or database seeding.
+- Casper UI status distinguishes completed, rejected, and violated responses without describing a completed process as permanently online.
 
 ### Planned
 
-- Linux x64 release package
-- macOS x64 release package
-- macOS ARM64 release package
-- Automated build and release validation
+- Linux x64 Casper native package
+- macOS x64 Casper native package
+- macOS ARM64 Casper native package
+- Automated release publishing
 - Published checksum files
 - Windows code signing
 
@@ -45,6 +60,7 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 - Windows x64 self-contained ZIP package.
 - No separate .NET installation required.
 - The executable must remain beside the included native libraries.
+
 ## [1.1.1] - 2026-08-05
 
 ### Added
@@ -109,4 +125,3 @@ The format follows Keep a Changelog principles. Versions follow Semantic Version
 [1.1.1]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Grar00t/Casper.DataForge/releases/tag/v1.0.0
-
