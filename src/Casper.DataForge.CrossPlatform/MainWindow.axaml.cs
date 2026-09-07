@@ -41,9 +41,23 @@ public partial class MainWindow : Window
         UpdateDatabaseStatus();
         LoadKnowledgeBase();
         Render();
+
+        EngineIntegrityState initialEngineState = _engine.IntegrityState;
+        string startupMessage = initialEngineState switch
+        {
+            EngineIntegrityState.Verified =>
+                "Casper engine SHA-256 verified and ready. / تم التحقق من بصمة محرك كاسبر وهو جاهز.",
+            EngineIntegrityState.Unpinned =>
+                "Casper engine detected but unpinned. Forge conversion is ready. / تم اكتشاف محرك كاسبر بدون تثبيت بصمة؛ تحويل Forge جاهز.",
+            EngineIntegrityState.Invalid =>
+                "Casper engine integrity validation failed. Forge conversion remains available. / فشل التحقق من سلامة محرك كاسبر؛ تحويل Forge متاح.",
+            _ =>
+                "Casper engine is unavailable. Forge conversion remains available. / محرك كاسبر غير متاح؛ تحويل Forge متاح."
+        };
+
         AddChatMessage(
             "CASPER / كاسبر",
-            "Ready for a Casper query. / جاهز لاستعلام كاسبر.",
+            startupMessage,
             isUser: false);
     }
 
