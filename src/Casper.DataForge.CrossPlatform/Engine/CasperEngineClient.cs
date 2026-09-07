@@ -190,11 +190,14 @@ public sealed class CasperEngineClient
         string error = await errorTask.ConfigureAwait(false);
         int exitCode = process.ExitCode;
 
-        if (exitCode != 0)
-            throw new InvalidOperationException(
-                $"Casper engine exited with code {exitCode}. Error={error.Trim()}");
         if (string.IsNullOrWhiteSpace(output))
+        {
+            if (exitCode != 0)
+                throw new InvalidOperationException(
+                    $"Casper engine exited with code {exitCode} and returned no JSON. Error={error.Trim()}");
+
             throw new InvalidDataException($"Casper returned no JSON. Error={error.Trim()}");
+        }
 
         CasperResponse? response;
         try
@@ -227,8 +230,14 @@ public sealed class CasperEngineClient
             throw new ArgumentException("Query cannot be empty.", nameof(query));
         ArgumentNullException.ThrowIfNull(response);
 
-        if (response.ExitCode != 0)
-            throw new InvalidDataException($"Non-zero Casper exit code: {response.ExitCode}.");
+        bool structuredPolicyOutcome = response.Violated || response.Rejected;
+        bool acceptedExitCode =
+            response.ExitCode == 0 ||
+            (response.ExitCode == 1 && structuredPolicyOutcome);
+
+        if (!acceptedExitCode)
+            throw new InvalidDataException(
+                $"Casper exit code {response.ExitCode} is not valid for the returned response state.");
         if (response.SourceCount < 0)
             throw new InvalidDataException("Casper returned a negative source count.");
         if (response.Sources is null)

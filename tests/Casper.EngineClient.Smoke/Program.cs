@@ -195,6 +195,79 @@ try
         return;
     }
 
+    bool policyExitAccepted = true;
+    try
+    {
+        CasperEngineClient.ValidateResponse(
+            query,
+            response with
+            {
+                ExitCode = 1,
+                Violated = true
+            });
+    }
+    catch
+    {
+        policyExitAccepted = false;
+    }
+
+    Console.WriteLine($"POLICY_EXIT_ACCEPTED_PASS={policyExitAccepted}");
+
+    if (!policyExitAccepted)
+    {
+        Environment.ExitCode = 7;
+        return;
+    }
+
+    bool unflaggedExitOneRejected = false;
+    try
+    {
+        CasperEngineClient.ValidateResponse(
+            query,
+            response with
+            {
+                ExitCode = 1,
+                Violated = false,
+                Rejected = false
+            });
+    }
+    catch (InvalidDataException)
+    {
+        unflaggedExitOneRejected = true;
+    }
+
+    Console.WriteLine($"UNFLAGGED_EXIT_ONE_REJECTED_PASS={unflaggedExitOneRejected}");
+
+    if (!unflaggedExitOneRejected)
+    {
+        Environment.ExitCode = 8;
+        return;
+    }
+
+    bool fatalExitRejected = false;
+    try
+    {
+        CasperEngineClient.ValidateResponse(
+            query,
+            response with
+            {
+                ExitCode = 2,
+                Violated = true
+            });
+    }
+    catch (InvalidDataException)
+    {
+        fatalExitRejected = true;
+    }
+
+    Console.WriteLine($"FATAL_EXIT_REJECTED_PASS={fatalExitRejected}");
+
+    if (!fatalExitRejected)
+    {
+        Environment.ExitCode = 9;
+        return;
+    }
+
     bool mismatchRejected = false;
     try
     {
@@ -211,7 +284,7 @@ try
 
     if (!mismatchRejected)
     {
-        Environment.ExitCode = 7;
+        Environment.ExitCode = 10;
         return;
     }
 
@@ -230,7 +303,7 @@ try
 
     if (!invalidHashRejected)
     {
-        Environment.ExitCode = 8;
+        Environment.ExitCode = 11;
         return;
     }
 
@@ -261,7 +334,7 @@ try
 
     if (!proofBindingPass)
     {
-        Environment.ExitCode = 9;
+        Environment.ExitCode = 12;
         return;
     }
 
@@ -289,13 +362,16 @@ try
         unpinnedStatePass &&
         mismatchStatePass &&
         responseValidationPass &&
+        policyExitAccepted &&
+        unflaggedExitOneRejected &&
+        fatalExitRejected &&
         mismatchRejected &&
         invalidHashRejected &&
         proofBindingPass &&
         proofMismatchRejected;
 
     Console.WriteLine($"CLIENT_SMOKE_PASS={pass}");
-    Environment.ExitCode = pass ? 0 : 10;
+    Environment.ExitCode = pass ? 0 : 13;
 }
 finally
 {
