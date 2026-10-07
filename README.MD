@@ -114,7 +114,7 @@ The engine client also validates:
 - proof SHA-256 format
 - source SHA-256 format
 - proof-file existence
-- `NIYAH-PROOF-V1` proof-file header
+- `NIYAH-PROOF-V1` and `NIYAH-PROOF-V2` proof-file headers, with `proof_kind`/header consistency when `proof_kind` is present
 - proof-file declared hash binding to the response `proof` digest when both are present
 
 Relative `proof_file` values are resolved against the native engine working directory.
