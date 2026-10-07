@@ -338,6 +338,47 @@ try
         return;
     }
 
+    File.WriteAllText(
+        proofPath,
+        $"NIYAH-PROOF-V2\nhash: {response.Proof}\nprompt_hash: {new string('C', 64)}\noutput_hash: {new string('D', 64)}\nrules_hash: {new string('0', 64)}\nprompt_hex: 74657374\noutput_hex: 74657374\n",
+        new UTF8Encoding(false));
+
+    CasperResponse v2BoundProofResponse =
+        CasperEngineClient.ValidateProofFile(
+            response with
+            {
+                ProofFile = proofFileName,
+                ProofKind = "NIYAH-PROOF-V2"
+            },
+            tempDirectory);
+
+    bool proofV2BindingPass =
+        v2BoundProofResponse.ProofFileBound &&
+        string.Equals(
+            v2BoundProofResponse.ProofFileDeclaredHash,
+            response.Proof,
+            StringComparison.OrdinalIgnoreCase);
+
+    Console.WriteLine($"PROOF_V2_BINDING_PASS={proofV2BindingPass}");
+
+    bool proofKindMismatchRejected = false;
+    try
+    {
+        _ = CasperEngineClient.ValidateProofFile(
+            response with
+            {
+                ProofFile = proofFileName,
+                ProofKind = "NIYAH-PROOF-V1"
+            },
+            tempDirectory);
+    }
+    catch (InvalidDataException)
+    {
+        proofKindMismatchRejected = true;
+    }
+
+    Console.WriteLine($"PROOF_KIND_MISMATCH_REJECTED_PASS={proofKindMismatchRejected}");
+
     bool proofMismatchRejected = false;
     File.WriteAllText(
         proofPath,
@@ -368,6 +409,8 @@ try
         mismatchRejected &&
         invalidHashRejected &&
         proofBindingPass &&
+        proofV2BindingPass &&
+        proofKindMismatchRejected &&
         proofMismatchRejected;
 
     Console.WriteLine($"CLIENT_SMOKE_PASS={pass}");
