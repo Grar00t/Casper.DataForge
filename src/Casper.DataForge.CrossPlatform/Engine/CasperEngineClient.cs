@@ -318,7 +318,7 @@ public sealed class CasperEngineClient
             string? header = reader.ReadLine();
             if (!IsSupportedProofKind(header))
                 throw new InvalidDataException("Casper proof file has an unsupported or missing header.");
-            if (!string.IsNullOrWhiteSpace(response.ProofKind) &&
+            if (response.ProofKind is not null &&
                 !string.Equals(response.ProofKind, header, StringComparison.Ordinal))
                 throw new InvalidDataException(
                     "Casper proof_kind does not match the proof file header.");
