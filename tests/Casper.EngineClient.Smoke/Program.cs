@@ -379,6 +379,31 @@ try
 
     Console.WriteLine($"PROOF_KIND_MISMATCH_REJECTED_PASS={proofKindMismatchRejected}");
 
+    bool blankProofKindRejected = false;
+    foreach (string blankProofKind in new[] { string.Empty, "   " })
+    {
+        try
+        {
+            _ = CasperEngineClient.ValidateProofFile(
+                response with
+                {
+                    ProofFile = proofFileName,
+                    ProofKind = blankProofKind
+                },
+                tempDirectory);
+        }
+        catch (InvalidDataException)
+        {
+            blankProofKindRejected = true;
+            continue;
+        }
+
+        blankProofKindRejected = false;
+        break;
+    }
+
+    Console.WriteLine($"BLANK_PROOF_KIND_REJECTED_PASS={blankProofKindRejected}");
+
     bool proofMismatchRejected = false;
     File.WriteAllText(
         proofPath,
@@ -411,6 +436,7 @@ try
         proofBindingPass &&
         proofV2BindingPass &&
         proofKindMismatchRejected &&
+        blankProofKindRejected &&
         proofMismatchRejected;
 
     Console.WriteLine($"CLIENT_SMOKE_PASS={pass}");
