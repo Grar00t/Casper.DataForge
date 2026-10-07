@@ -316,8 +316,12 @@ public sealed class CasperEngineClient
         {
             using var reader = new StreamReader(proofPath, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             string? header = reader.ReadLine();
-            if (!string.Equals(header, "NIYAH-PROOF-V1", StringComparison.Ordinal))
+            if (!IsSupportedProofKind(header))
                 throw new InvalidDataException("Casper proof file has an unsupported or missing header.");
+            if (!string.IsNullOrWhiteSpace(response.ProofKind) &&
+                !string.Equals(response.ProofKind, header, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "Casper proof_kind does not match the proof file header.");
 
             string? hashLine = reader.ReadLine();
             const string prefix = "hash: ";
@@ -446,6 +450,10 @@ public sealed class CasperEngineClient
         return true;
     }
 
+    private static bool IsSupportedProofKind(string? value) =>
+        string.Equals(value, "NIYAH-PROOF-V1", StringComparison.Ordinal) ||
+        string.Equals(value, "NIYAH-PROOF-V2", StringComparison.Ordinal);
+
     private static string? GetRuntimeDirectory()
     {
         string architecture = RuntimeInformation.OSArchitecture switch
@@ -489,6 +497,7 @@ public sealed record CasperResponse
     [JsonPropertyName("violated")] public bool Violated { get; init; }
     [JsonPropertyName("rejected")] public bool Rejected { get; init; }
     [JsonPropertyName("proof")] public string? Proof { get; init; }
+    [JsonPropertyName("proof_kind")] public string? ProofKind { get; init; }
     [JsonPropertyName("proof_file")] public string? ProofFile { get; init; }
     [JsonPropertyName("n_sources")] public int SourceCount { get; init; }
     [JsonPropertyName("sources")] public IReadOnlyList<CasperSource> Sources { get; init; } =
